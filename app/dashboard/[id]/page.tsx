@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getWorkspaceForUser } from "@/lib/workspaces";
+import { env } from "@/lib/env";
 import JoinCodeBox from "./JoinCodeBox";
+import ConnectPrompt from "./ConnectPrompt";
+import WorkspaceLive from "./WorkspaceLive";
 
 export default async function WorkspacePage({
   params,
@@ -30,11 +33,22 @@ export default async function WorkspacePage({
       </header>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-10">
-        <h1 className="font-display text-3xl font-bold tracking-tight">{ws.name}</h1>
-        <p className="mt-1 font-mono text-xs text-muted">
-          {ws.id} · {ws.github_repo} · {ws.github_base_branch} @{" "}
-          {ws.github_base_sha?.slice(0, 7)}
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="font-display text-3xl font-bold tracking-tight">{ws.name}</h1>
+            <p className="mt-1 font-mono text-xs text-muted">
+              {ws.id} · {ws.github_repo} · {ws.github_base_branch} @{" "}
+              {ws.github_base_sha?.slice(0, 7)}
+            </p>
+          </div>
+          <span
+            className={`rounded-full px-2.5 py-1 font-mono text-xs ${
+              ws.status === "active" ? "bg-accent-soft text-accent-dark" : "bg-neutral-100 text-muted"
+            }`}
+          >
+            {ws.status}
+          </span>
+        </div>
 
         <div className="mt-8 grid gap-4">
           <JoinCodeBox
@@ -42,9 +56,13 @@ export default async function WorkspacePage({
             initialCode={ws.join_code}
             expiresAt={ws.join_code_expires_at}
           />
-          <div className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-faint">
-            Team status, activity feed, and the agent connect prompt land here next.
-          </div>
+          <ConnectPrompt
+            appUrl={env.appUrl()}
+            joinCode={ws.join_code}
+            username={user.github_username}
+            workspaceName={ws.name}
+          />
+          <WorkspaceLive workspaceId={ws.id} />
         </div>
       </main>
     </div>

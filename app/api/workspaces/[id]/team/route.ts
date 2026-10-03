@@ -1,0 +1,77 @@
+import { NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/auth";
+import { getWorkspaceForUser } from "@/lib/workspaces";
+import { supabaseAdmin } from "@/lib/supabase";
+import { newSessionToken } from "@/lib/mcp/util";
+
+async function ownedWorkspace(workspaceId: string, userId: string) {
+  const ws = await getWorkspaceForUser(workspaceId, userId);
+  return ws;
+}
+
+/** GET /api/workspaces/[id]/team — agents in the workspace (owner only). */
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const { id } = await params;
+  if (!(await ownedWorkspace(id, user.id))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  const { data, error } = await supabaseAdmin()
+    .from("agents")
+    .select("id, name, client_type, username_label, status, current_path, current_task, last_seen, created_at")
+    .eq("workspace_id", id)
+    .order("created_at", { ascending: true });
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ agents: data });
+}
+
+/** POST /api/workspaces/[id]/team — approve or decline a join request.
+ *  Body: { agent_id, action: "approve" | "decline" } */
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const { id } = await params;
+  if (!(await ownedWorkspace(id, user.id))) {
+    return NextResponse.json({ error: "not found" }, { status: 404 });
+  }
+  let body: { agent_id?: string; action?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+  const db = supabaseAdmin();
+  const { data: agent } = await db
+    .from("agents")
+    .select("id, workspace_id")
+    .eq("id", body.agent_id ?? "")
+    .eq("workspace_id", id)
+    .single();
+  if (!agent) return NextResponse.json({ error: "Agent not found." }, { status: 404 });
+
+  if (body.action === "approve") {
+    const { error } = await db
+      .from("agents")
+      .update({
+        status: "active",
+        session_token: newSessionToken(),
+        last_seen: new Date().toISOString(),
+      })
+      .eq("id", (agent as { id: string }).id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+  if (body.action === "decline") {
+    const { error } = await db.from("agents").delete().eq("id", (agent as { id: string }).id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
+  return NextResponse.json({ error: 'action must be "approve" or "decline".' }, { status: 400 });
+}
