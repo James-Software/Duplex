@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import { Geist, Geist_Mono, TASA_Orbiter } from "next/font/google";
 import "./globals.css";
 
@@ -24,7 +25,7 @@ export const metadata: Metadata = {
     "One shared cloud workspace where Claude Code, Codex, and other coding agents collaborate — then export to GitHub with human attribution.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html
       lang="en"

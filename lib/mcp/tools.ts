@@ -84,9 +84,10 @@ function lockError(path: string, holder: { name: string; intent: string | null }
 /** Write an agent's status message (agents.current_task). Shared by set_status and complete. */
 async function writeAgentStatus(
   agentId: string,
-  status: string
+  status: string,
+  maxChars = 140
 ): Promise<{ error?: string; value: string | null }> {
-  const value = status.trim().slice(0, 140) || null;
+  const value = status.trim().slice(0, maxChars) || null;
   const { error } = await supabaseAdmin().from("agents").update({ current_task: value }).eq("id", agentId);
   if (error) return { error: error.message, value: null };
   return { value };
@@ -176,7 +177,8 @@ export function registerDuplexTools(server: McpServer) {
       return textResult(
         `Join request sent to workspace "${ws.name}" as "${name}" (agent_id: ${(agent as { id: string }).id}).\n` +
           `STATUS: PENDING — the workspace creator must approve you in the dashboard.\n` +
-          `Poll get_team_status with your agent_id every ~10 seconds until approved.`
+          `Poll get_team_status with your agent_id every ~10 seconds until approved.\n` +
+          `When your work is fully done, call complete with a summary of your changes (required).`
       );
     }
   );
@@ -252,7 +254,8 @@ export function registerDuplexTools(server: McpServer) {
           `edit_file with the base_version you read → send_message to coordinate. ` +
           `If edit_file reports a CONFLICT, read_file again and rebase your change. ` +
           `If a file is LOCKED by a teammate, message them with send_message instead of editing it. ` +
-          `When you are fully done, call complete with a summary of what you changed.`
+          `When your work is FULLY done, you MUST call complete with a short paragraph summarizing what you changed — ` +
+          `never go silent without calling it.`
       );
     }
   );
@@ -748,13 +751,15 @@ export function registerDuplexTools(server: McpServer) {
     "complete",
     {
       description:
-        "Mark yourself done. Releases ALL of your file locks at once. Optionally set a final summary so the team can see what you changed.",
+        "REQUIRED when your work is fully done — never go silent without calling it. Releases ALL of your file locks at once. You MUST include a summary: a short paragraph (max 500 chars) describing what you changed.",
       inputSchema: {
         session_token: sessionTokenField,
         summary: z
           .string()
           .optional()
-          .describe("What you did, e.g. 'Added JWT refresh to auth.ts'. Shown as your status."),
+          .describe(
+            "REQUIRED. Short paragraph (max 500 chars) describing what you changed, e.g. 'Added JWT refresh to auth.ts and wired it into the login flow. All tests pass.' Shown as your status and included in the export PR."
+          ),
       },
     },
     async ({ session_token, summary }) => {
@@ -767,7 +772,7 @@ export function registerDuplexTools(server: McpServer) {
       if (error) return errorResult(`Could not release claims: ${error.message}`);
       let statusLine = "";
       if (summary && summary.trim()) {
-        const { error: statusError, value } = await writeAgentStatus(agent.id, summary);
+        const { error: statusError, value } = await writeAgentStatus(agent.id, summary, 500);
         if (statusError) return errorResult(`Released claims, but could not set summary: ${statusError}`);
         statusLine = ` Status: "${value}".`;
       }

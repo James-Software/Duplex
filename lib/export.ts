@@ -54,10 +54,10 @@ export async function finalizeWorkspace(
 
     const { data: agentRows } = await db
       .from("agents")
-      .select("id, name")
+      .select("id, name, current_task")
       .eq("workspace_id", workspace.id)
       .order("created_at", { ascending: true });
-    const agents = (agentRows ?? []) as Pick<DbAgent, "id" | "name">[];
+    const agents = (agentRows ?? []) as Pick<DbAgent, "id" | "name" | "current_task">[];
     const agentName = (id: string | null) =>
       agents.find((a) => a.id === id)?.name ?? "workspace";
 
@@ -149,7 +149,9 @@ export async function finalizeWorkspace(
       ),
       ``,
       `### Agents`,
-      ...agents.map((a) => `- ${a.name}`),
+      ...agents.map((a) =>
+        a.current_task ? `- ${a.name}\n  > ${a.current_task}` : `- ${a.name}`
+      ),
       ``,
       `### Files changed (${files.length})`,
       ...files.map((f) => `- \`${f.path}\` (last by ${agentName(f.updated_by_agent)})`),
