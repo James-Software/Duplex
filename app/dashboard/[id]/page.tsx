@@ -60,7 +60,7 @@ export default async function WorkspacePage({
             workspaceName={ws.name}
           />
           <WorkspaceLive workspaceId={ws.id} />
-          <FinalizeBox workspaceId={ws.id} repo={ws.github_repo} finalized={ws.status === "finalized"} />
+          <FinalizeBox workspaceId={ws.id} finalized={ws.status === "finalized"} />
         </div>
       </main>
     </div>

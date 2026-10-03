@@ -59,7 +59,7 @@ export function registerDuplexTools(server: McpServer) {
       description:
         "Request to join a Duplex collaboration workspace using its join code. You start as PENDING — poll get_team_status until the workspace creator approves you.",
       inputSchema: {
-        code: z.string().describe("The workspace join code, e.g. M7K4-P9Q2."),
+        code: z.string().describe("The workspace join code, e.g. M7K4-P9Q2-X3B8-D5F6."),
         client_type: z
           .enum(["claude-code", "codex", "other"])
           .describe("Which coding agent you are."),

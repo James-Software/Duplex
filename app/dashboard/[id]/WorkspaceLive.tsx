@@ -34,8 +34,13 @@ function timeOf(iso: string): string {
 
 export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [ownerGithubId, setOwnerGithubId] = useState<number | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+
+  const avatarUrl = ownerGithubId
+    ? `https://avatars.githubusercontent.com/u/${ownerGithubId}?v=4&s=64`
+    : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -47,7 +52,11 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
           fetch(`/api/workspaces/${workspaceId}/feed`, { credentials: "same-origin" }),
         ]);
         if (cancelled) return;
-        if (teamRes.ok) setAgents(((await teamRes.json()).agents ?? []) as Agent[]);
+        if (teamRes.ok) {
+          const json = await teamRes.json();
+          setAgents((json.agents ?? []) as Agent[]);
+          if (typeof json.owner_github_id === "number") setOwnerGithubId(json.owner_github_id);
+        }
         if (feedRes.ok) setFeed(((await feedRes.json()).feed ?? []) as FeedItem[]);
       } catch {
         /* transient network hiccup — next poll retries */
@@ -68,7 +77,11 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
         fetch(`/api/workspaces/${workspaceId}/team`, { credentials: "same-origin" }),
         fetch(`/api/workspaces/${workspaceId}/feed`, { credentials: "same-origin" }),
       ]);
-      if (teamRes.ok) setAgents(((await teamRes.json()).agents ?? []) as Agent[]);
+      if (teamRes.ok) {
+        const json = await teamRes.json();
+        setAgents((json.agents ?? []) as Agent[]);
+        if (typeof json.owner_github_id === "number") setOwnerGithubId(json.owner_github_id);
+      }
       if (feedRes.ok) setFeed(((await feedRes.json()).feed ?? []) as FeedItem[]);
     } catch {
       /* transient network hiccup */
@@ -111,14 +124,19 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
                 key={a.id}
                 className="flex items-center justify-between rounded-xl border border-accent-line bg-accent-soft px-4 py-3"
               >
-                <div>
-                  <p className="text-sm font-medium">
-                    {a.name}
-                    <span className="ml-2 font-mono text-xs text-muted">{a.client_type}</span>
-                  </p>
-                  {a.username_label && (
-                    <p className="font-mono text-xs text-muted">@{a.username_label}</p>
+                <div className="flex items-center gap-3">
+                  {avatarUrl && (
+                    <img src={avatarUrl} alt="" className="h-7 w-7 rounded-full" />
                   )}
+                  <div>
+                    <p className="text-sm font-medium">
+                      {a.name}
+                      <span className="ml-2 font-mono text-xs text-muted">{a.client_type}</span>
+                    </p>
+                    {a.username_label && (
+                      <p className="font-mono text-xs text-muted">@{a.username_label}</p>
+                    )}
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <button
@@ -149,6 +167,9 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
             >
               <div className="flex items-center gap-3">
                 <span className="h-2 w-2 rounded-full bg-accent" aria-label="active" />
+                {avatarUrl && (
+                  <img src={avatarUrl} alt="" className="h-7 w-7 rounded-full" />
+                )}
                 <div>
                   <p className="text-sm font-medium">
                     {a.name}

@@ -26,7 +26,7 @@ export async function GET(
     .eq("workspace_id", id)
     .order("created_at", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ agents: data });
+  return NextResponse.json({ agents: data, owner_github_id: user.github_id });
 }
 
 /** POST /api/workspaces/[id]/team — approve or decline a join request.
