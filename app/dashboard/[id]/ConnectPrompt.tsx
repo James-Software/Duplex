@@ -20,6 +20,14 @@ function CheckIcon({ className = "" }: { className?: string }) {
   );
 }
 
+function ChevronIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M4 6l4 4 4-4" />
+    </svg>
+  );
+}
+
 /** Copy button that morphs copy → checkmark (blur + 0.97 press, per motion principles). */
 function MorphCopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -34,7 +42,7 @@ function MorphCopyButton({ text }: { text: string }) {
     <button
       onClick={copy}
       aria-label={copied ? "Copied" : "Copy prompt"}
-      className="btn relative flex h-9 w-9 items-center justify-center rounded-full border border-line text-muted hover:border-ink hover:text-ink"
+      className="btn relative flex h-8 w-8 items-center justify-center rounded-full border border-line text-muted hover:border-ink hover:text-ink"
     >
       <span
         className={`absolute transition-all duration-150 ${
@@ -140,6 +148,7 @@ export default function ConnectPrompt({
   onRegenerated: (newCode: string, newExpires: string) => void;
 }) {
   const [agentName, setAgentName] = useState(readAgentNameCookie);
+  const [showPrompt, setShowPrompt] = useState(false);
   const effectiveName = agentName.trim() ? agentName.trim() : DEFAULT_AGENT_NAME;
   const prompt = buildPrompt(appUrl, joinCode, username, workspaceName, effectiveName);
 
@@ -149,14 +158,11 @@ export default function ConnectPrompt({
   }
 
   return (
-    <div className="rounded-2xl border border-line bg-card p-6">
+    <div className="rounded-2xl border border-line bg-card p-4">
       <div className="flex items-center justify-between">
-        <h2 className="font-display text-base font-semibold">Connect an agent</h2>
+        <h2 className="font-display text-sm font-semibold">Connect an agent</h2>
         <MorphCopyButton text={prompt} />
       </div>
-      <p className="mt-1 text-sm text-muted">
-        Paste this prompt into the agent. It connects, joins, and waits for your approval.
-      </p>
       <JoinCodeBox
         workspaceId={workspaceId}
         code={joinCode}
@@ -164,23 +170,40 @@ export default function ConnectPrompt({
         autoRegenerate={autoRegenerate}
         onRegenerated={onRegenerated}
       />
-      <label className="mt-5 block">
-        <span className="text-sm font-medium text-ink">Agent name</span>
-        <p className="mt-1 text-sm text-muted">
-          The agent connects with this name, e.g. Codex or Claude Code.
-        </p>
+      <div className="mt-3 flex items-center gap-3">
+        <label
+          htmlFor="duplex-agent-name"
+          className="shrink-0 text-xs font-medium text-ink"
+        >
+          Agent name
+        </label>
         <input
+          id="duplex-agent-name"
           value={agentName}
           onChange={(e) => onNameChange(e.target.value)}
           placeholder="e.g. Codex"
           spellCheck={false}
           maxLength={80}
-          className="mt-1.5 w-full rounded-xl border border-line bg-card px-4 py-2.5 text-sm text-ink placeholder:text-faint outline-none focus:border-accent"
+          className="w-full rounded-lg border border-line bg-card px-3 py-1.5 text-sm text-ink placeholder:text-faint outline-none focus:border-accent"
         />
-      </label>
-      <pre className="mt-4 max-h-72 overflow-auto rounded-xl bg-ink p-4 font-mono text-xs leading-relaxed text-neutral-200 whitespace-pre-wrap">
-        {prompt}
-      </pre>
+      </div>
+      <button
+        onClick={() => setShowPrompt((v) => !v)}
+        aria-expanded={showPrompt}
+        className="btn mt-3 flex items-center gap-1 text-xs font-medium text-muted hover:text-ink"
+      >
+        <ChevronIcon
+          className={`h-3.5 w-3.5 transition-transform duration-150 ${
+            showPrompt ? "rotate-180" : ""
+          }`}
+        />
+        {showPrompt ? "Hide full prompt" : "View full prompt"}
+      </button>
+      {showPrompt && (
+        <pre className="mt-2 max-h-64 overflow-auto rounded-xl bg-ink p-4 font-mono text-xs leading-relaxed text-neutral-200 whitespace-pre-wrap">
+          {prompt}
+        </pre>
+      )}
     </div>
   );
 }

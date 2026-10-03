@@ -89,35 +89,34 @@ export default function JoinCodeBox({
   const expired = new Date(expires).getTime() < now;
 
   return (
-    <div className="mt-5">
-      <div className="flex flex-wrap items-center gap-3">
-        <code className="rounded-xl border border-accent-line bg-accent-soft px-5 py-3 font-mono text-2xl font-bold tracking-widest text-accent-dark">
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-medium text-muted">Join code</span>
+        <code className="rounded-lg border border-accent-line bg-accent-soft px-3 py-1.5 font-mono text-base font-bold tracking-widest text-accent-dark">
           {code}
         </code>
         <button
           onClick={copy}
-          className="btn rounded-full border border-line px-4 py-2 text-sm font-medium hover:border-ink"
+          className="btn rounded-full border border-line px-3 py-1 text-xs font-medium hover:border-ink"
         >
           {copied ? "Copied" : "Copy"}
         </button>
         <button
           onClick={regenerate}
           disabled={busy}
-          className="btn rounded-full border border-line px-4 py-2 text-sm font-medium hover:border-ink disabled:opacity-50"
+          className="btn rounded-full border border-line px-3 py-1 text-xs font-medium hover:border-ink disabled:opacity-50"
         >
           {busy ? "…" : "Regenerate"}
         </button>
-      </div>
-      <p className="mt-2 text-xs text-faint">
         {expired ? (
-          <span className="font-medium text-red-600">now. Regenerate it</span>
+          <span className="text-xs font-medium text-red-600">Expired</span>
         ) : (
-          <>
-            Expires at {new Date(expires).toLocaleTimeString()} · a fresh code is
-            issued when an agent joins
-          </>
+          <span className="text-xs text-faint">
+            Expires at {new Date(expires).toLocaleTimeString()} · new code on
+            each join
+          </span>
         )}
-      </p>
+      </div>
     </div>
   );
 }
