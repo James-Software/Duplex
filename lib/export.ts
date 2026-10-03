@@ -41,7 +41,10 @@ export async function finalizeWorkspace(
     const { data: fileRows } = await db
       .from("workspace_files")
       .select("path, content, updated_by_agent")
-      .eq("workspace_id", workspace.id);
+      .eq("workspace_id", workspace.id)
+      // Only files actually touched by agents. Repo-seeded files (with a null
+      // editor) stay out of the export — the PR contains exactly what changed.
+      .not("updated_by_agent", "is", null);
     const files = (fileRows ?? []) as {
       path: string;
       content: string;
