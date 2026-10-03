@@ -104,19 +104,19 @@ export default async function LandingPage({
           <div className="mb-6 flex items-center justify-center gap-3" aria-label="Works with Claude, Codex, and OpenCode">
             <span
               title="Claude"
-              className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-card"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-card transition-transform duration-150 hover:scale-105"
             >
               <ClaudeMark className="h-6 w-6" />
             </span>
             <span
               title="Codex"
-              className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-card"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-card transition-transform duration-150 hover:scale-105"
             >
               <CodexMark className="h-6 w-6" />
             </span>
             <span
               title="OpenCode"
-              className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-card"
+              className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-card transition-transform duration-150 hover:scale-105"
             >
               <OpenCodeMark className="h-6 w-6" />
             </span>
