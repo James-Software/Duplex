@@ -51,8 +51,8 @@ function hash01(i: number, salt: number): number {
 /**
  * Fixed full-viewport backdrop: an Antigravity-style breathing point-cloud sphere.
  * ~350 identical solid-green dashes on a slowly rotating 3D sphere, projected to 2D
- * on a transparent canvas over the light page surface. Every dash points at the
- * cursor like iron filings to a magnet.
+ * on a transparent canvas over the light page surface. Every dash faces the way
+ * it orbits — tangential to the sphere, always to the side like the rotation.
  * The signature motion is a slow gather/disperse loop: tight dense shell <->
  * wide drifting cloud. The orb trails the cursor; hovering any button/link sucks
  * every dash into the mouse, where they stream in and vanish.
@@ -80,8 +80,8 @@ export default function Orb() {
     let hoveringControl = false;
     let suck = 0;
 
-    // Radial orientation state: dirs holds each dash's last known unit
-    // direction toward the cursor (deterministic hash fallback while unset).
+    // Tangent orientation state: dirs holds each dash's last known unit
+    // tangent direction (deterministic hash fallback for degenerate cases).
     const dirs = new Float32Array(PARTICLE_COUNT * 2);
 
     const resize = () => {
@@ -234,14 +234,17 @@ export default function Orb() {
 
         if (alpha <= 0.01) continue;
 
-        // Radial orientation: every dash points at the cursor like iron
-        // filings to a magnet. Fixed length — never scaled by distance.
-        let dx = mouseX - px;
-        let dy = mouseY - py;
-        const mag = Math.hypot(dx, dy);
-        if (mag > 0.001) {
-          dx /= mag;
-          dy /= mag;
+        // Tangential orientation: every dash faces the way it orbits —
+        // always to the side, perpendicular to its radial vector, in the
+        // rotation direction. The tangent of Y-rotation at (x, y, z) is
+        // (z, 0, -x); rotate it through the same rotY -> rotX chain as the
+        // positions and take the 2D direction. Fixed length — never scaled.
+        let dx = z * cosY - x * sinY;
+        let dy = (z * sinY + x * cosY) * sinX;
+        const tmag = Math.hypot(dx, dy);
+        if (tmag > 0.0001) {
+          dx /= tmag;
+          dy /= tmag;
           dirs[pi * 2] = dx;
           dirs[pi * 2 + 1] = dy;
         } else {
