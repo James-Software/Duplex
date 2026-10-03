@@ -142,6 +142,35 @@ function lockError(path: string, holder: { name: string; intent: string | null }
   );
 }
 
+/**
+ * Build the CONFLICT message after a conditional write matched zero rows
+ * (the atomic-increment race was lost). Re-reads the file for the current
+ * version and last editor so the wording matches the fast-path error.
+ */
+async function conflictMessage(
+  db: ReturnType<typeof supabaseAdmin>,
+  workspaceId: string,
+  path: string,
+  baseVersion: number,
+  verb: "write" | "edit"
+): Promise<string> {
+  const { data } = await db
+    .from("workspace_files")
+    .select("version, updated_by_agent")
+    .eq("workspace_id", workspaceId)
+    .eq("path", path)
+    .single();
+  const row = data as { version: number; updated_by_agent: string | null } | null;
+  if (!row) {
+    return `CONFLICT on ${path}: you based your ${verb} on version ${baseVersion}, but the file no longer exists.`;
+  }
+  const who = await agentName(row.updated_by_agent);
+  return (
+    `CONFLICT on ${path}: you based your ${verb} on version ${baseVersion}, but the file is now version ${row.version} ` +
+    `(last edited by ${who}). Call read_file to get the latest content, then re-apply your change.`
+  );
+}
+
 /** Write an agent's status message (agents.current_task). Shared by set_status and complete. */
 async function writeAgentStatus(
   agentId: string,
@@ -393,13 +422,37 @@ export function registerDuplexTools(server: McpServer) {
             `CONFLICT on ${p}: you based your write on version ${base_version}, but the file is now version ${row.version} (last edited by ${who}). Call read_file to get the latest content, then re-apply your change.`
           );
         }
+        // Atomic increment: the version predicate makes the check-and-write a
+        // single statement, so a same-instant race can't silently overwrite.
+        const now = new Date().toISOString();
+        if (base_version !== undefined) {
+          const { data: won, error } = await db
+            .from("workspace_files")
+            .update({
+              content,
+              version: base_version + 1,
+              updated_by_agent: agent.id,
+              updated_at: now,
+            })
+            .eq("workspace_id", agent.workspace_id)
+            .eq("path", p)
+            .eq("version", base_version)
+            .select("version");
+          if (error) return errorResult(`Write failed: ${error.message}`);
+          if (!won || (won as { version: number }[]).length === 0) {
+            return errorResult(await conflictMessage(db, agent.workspace_id, p, base_version, "write"));
+          }
+          await recordEdit(agent.workspace_id, agent, p, base_version, base_version + 1);
+          await touchAgentPath(agent.id, p);
+          return textResult(`Wrote ${p} (version ${base_version} → ${base_version + 1}).`);
+        }
         const { error } = await db
           .from("workspace_files")
           .update({
             content,
             version: row.version + 1,
             updated_by_agent: agent.id,
-            updated_at: new Date().toISOString(),
+            updated_at: now,
           })
           .eq("workspace_id", agent.workspace_id)
           .eq("path", p);
@@ -463,18 +516,25 @@ export function registerDuplexTools(server: McpServer) {
         return errorResult(`old_text not found in ${p} (version ${row.version}). Read the file again to see its current content.`);
       }
       const updated = row.content.replace(old_text, new_text);
-      const { error } = await db
+      // Atomic increment: the version predicate makes the check-and-write a
+      // single statement, so a same-instant race can't silently overwrite.
+      const { data: won, error } = await db
         .from("workspace_files")
         .update({
           content: updated,
-          version: row.version + 1,
+          version: base_version + 1,
           updated_by_agent: agent.id,
           updated_at: new Date().toISOString(),
         })
         .eq("workspace_id", agent.workspace_id)
-        .eq("path", p);
+        .eq("path", p)
+        .eq("version", base_version)
+        .select("version");
       if (error) return errorResult(`Edit failed: ${error.message}`);
-      await recordEdit(agent.workspace_id, agent, p, row.version, row.version + 1);
+      if (!won || (won as { version: number }[]).length === 0) {
+        return errorResult(await conflictMessage(db, agent.workspace_id, p, base_version, "edit"));
+      }
+      await recordEdit(agent.workspace_id, agent, p, base_version, base_version + 1);
       await touchAgentPath(agent.id, p);
       const note = occurrences > 1 ? ` (first of ${occurrences} occurrences replaced)` : "";
       return textResult(`Edited ${p} (version ${row.version} → ${row.version + 1})${note}.`);
