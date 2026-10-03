@@ -12,7 +12,7 @@ export function cleanPath(raw: string): string | null {
   return parts.join("/");
 }
 
-/** Look up an agent by session token; must be approved (active). */
+/** Look up an agent by session token; must be approved (active) and in a live workspace. */
 export async function requireAgent(sessionToken: string): Promise<DbAgent> {
   const db = supabaseAdmin();
   const { data, error } = await db
@@ -30,6 +30,14 @@ export async function requireAgent(sessionToken: string): Promise<DbAgent> {
     throw new Error(
       `Agent "${agent.name}" is not approved yet (status: ${agent.status}). Keep polling get_team_status.`
     );
+  }
+  const { data: ws } = await db
+    .from("workspaces")
+    .select("status")
+    .eq("id", agent.workspace_id)
+    .single();
+  if ((ws as { status: string } | null)?.status === "finalized") {
+    throw new Error("This workspace has been finalized — it is read-only now.");
   }
   await db.from("agents").update({ last_seen: new Date().toISOString() }).eq("id", agent.id);
   return agent;

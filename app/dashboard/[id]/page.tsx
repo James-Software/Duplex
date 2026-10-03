@@ -6,6 +6,7 @@ import { env } from "@/lib/env";
 import JoinCodeBox from "./JoinCodeBox";
 import ConnectPrompt from "./ConnectPrompt";
 import WorkspaceLive from "./WorkspaceLive";
+import FinalizeBox from "./FinalizeBox";
 
 export default async function WorkspacePage({
   params,
@@ -63,6 +64,7 @@ export default async function WorkspacePage({
             workspaceName={ws.name}
           />
           <WorkspaceLive workspaceId={ws.id} />
+          <FinalizeBox workspaceId={ws.id} repo={ws.github_repo} finalized={ws.status === "finalized"} />
         </div>
       </main>
     </div>
