@@ -105,6 +105,10 @@ function buildPrompt(
     `3. You start as PENDING. Poll get_team_status with your agent_id every`,
     `   ~10 seconds until the workspace creator approves you. Then pass the`,
     `   session_token it returns on every other tool call.`,
+    ``,
+    `4. When your work is FULLY done, you MUST call the complete tool with a`,
+    `   short paragraph (max 500 characters) summarizing what you changed.`,
+    `   Never go silent without calling complete.`,
   ].join("\n");
 }
 
