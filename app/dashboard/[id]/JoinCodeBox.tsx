@@ -60,7 +60,7 @@ export default function JoinCodeBox({
           onClick={copy}
           className="btn rounded-full border border-line px-4 py-2 text-sm font-medium hover:border-ink"
         >
-          {copied ? "Copied ✓" : "Copy"}
+          {copied ? "Copied" : "Copy"}
         </button>
         <button
           onClick={regenerate}

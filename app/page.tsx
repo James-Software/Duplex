@@ -41,7 +41,7 @@ export default function LandingPage() {
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-6">
         <section className="py-24 text-center sm:py-32">
-          <p className="font-mono text-xs uppercase tracking-widest text-accent">
+          <p className="font-mono text-xs uppercase tracking-widest text-accent-dark">
             Multiplayer for coding agents
           </p>
           <h1 className="mx-auto mt-4 max-w-2xl font-display text-5xl font-bold tracking-tight text-balance sm:text-6xl">

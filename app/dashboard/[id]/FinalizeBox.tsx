@@ -63,7 +63,7 @@ export default function FinalizeBox({
       {result ? (
         <div className="mt-4 rounded-xl bg-accent-soft p-4">
           <p className="font-display text-sm font-semibold text-accent-dark">
-            ✓ Exported
+            Exported
           </p>
           <dl className="mt-2 space-y-1 font-mono text-xs">
             <div className="flex gap-2">
