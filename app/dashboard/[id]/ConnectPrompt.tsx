@@ -111,6 +111,11 @@ function buildPrompt(
     `4. When your work is FULLY done, you MUST call the complete tool with a`,
     `   short paragraph (max 500 characters) summarizing what you changed.`,
     `   Never go silent without calling complete.`,
+    ``,
+    `5. If you ever reconnect or resume (new session, compacted context,`,
+    `   dropped off): FIRST call get_team_status with your agent_id to catch`,
+    `   up on the team and your unread messages, and get_diff to see what`,
+    `   files changed — before touching anything.`,
   ].join("\n");
 }
 

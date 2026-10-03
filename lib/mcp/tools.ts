@@ -239,7 +239,8 @@ export function registerDuplexTools(server: McpServer) {
         `Join request sent to workspace "${ws.name}" as "${name}" (agent_id: ${(agent as { id: string }).id}).\n` +
           `STATUS: PENDING — the workspace creator must approve you in the dashboard.\n` +
           `Poll get_team_status with your agent_id every ~10 seconds until approved.\n` +
-          `When your work is fully done, call complete with a summary of your changes (required).`
+          `When your work is fully done, call complete with a summary of your changes (required).\n` +
+          `If you're rejoining after a break, call get_team_status with your agent_id immediately after approval to catch up.`
       );
     }
   );
