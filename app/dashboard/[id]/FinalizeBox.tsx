@@ -66,7 +66,7 @@ export default function FinalizeBox({
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
           onClick={() => setConfirming(true)}
-          className="btn rounded-full bg-ink px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800"
+          className="btn rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-dark"
         >
           Finalize & export
         </button>
@@ -83,7 +83,7 @@ export default function FinalizeBox({
           <button
             onClick={finalize}
             disabled={busy}
-            className="btn rounded-full bg-ink px-5 py-2 text-sm font-semibold text-white hover:bg-neutral-800 disabled:opacity-50"
+            className="btn rounded-full bg-accent px-5 py-2 text-sm font-semibold text-white hover:bg-accent-dark disabled:opacity-50"
           >
             {busy ? "Exporting…" : "Yes, finalize"}
           </button>

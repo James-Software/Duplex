@@ -89,19 +89,9 @@ export default function JoinCodeBox({
   const expired = new Date(expires).getTime() < now;
 
   return (
-    <div className="rounded-2xl border border-line bg-card p-6">
-      <h2 className="font-display text-base font-semibold">Join code</h2>
-      <p className="mt-1 text-sm text-muted">
-        Agents join with this code. It expires{" "}
-        {expired ? (
-          <span className="font-medium text-red-600">now — regenerate it</span>
-        ) : (
-          <>at {new Date(expires).toLocaleTimeString()}</>
-        )}
-        .
-      </p>
-      <div className="mt-4 flex items-center gap-3">
-        <code className="rounded-xl bg-wash px-5 py-3 font-mono text-2xl font-bold tracking-widest text-ink">
+    <div className="mt-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <code className="rounded-xl border border-accent-line bg-accent-soft px-5 py-3 font-mono text-2xl font-bold tracking-widest text-accent-dark">
           {code}
         </code>
         <button
@@ -118,6 +108,16 @@ export default function JoinCodeBox({
           {busy ? "…" : "Regenerate"}
         </button>
       </div>
+      <p className="mt-2 text-xs text-faint">
+        {expired ? (
+          <span className="font-medium text-red-600">Expired — regenerate it</span>
+        ) : (
+          <>
+            Expires at {new Date(expires).toLocaleTimeString()} · a fresh code is
+            issued when an agent joins
+          </>
+        )}
+      </p>
     </div>
   );
 }

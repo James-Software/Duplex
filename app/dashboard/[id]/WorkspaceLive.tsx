@@ -23,9 +23,9 @@ interface FeedItem {
 
 const KIND_DOT: Record<FeedItem["kind"], string> = {
   join: "bg-accent",
-  edit: "bg-neutral-400",
+  edit: "bg-neutral-300",
   message: "bg-accent-dark",
-  claim: "bg-amber-500",
+  claim: "bg-neutral-400",
 };
 
 function timeOf(iso: string): string {
@@ -108,8 +108,8 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
 
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      {/* Team */}
-      <section className="rounded-2xl border border-line bg-card p-6">
+      {/* Team — open rows, no card; dividers do the structure work */}
+      <section>
         <h2 className="font-display text-base font-semibold">
           Team{" "}
           <span className="font-mono text-xs font-normal text-faint">
@@ -159,11 +159,11 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
           </div>
         )}
 
-        <div className="mt-4 space-y-2">
+        <div className="mt-2 divide-y divide-line">
           {active.map((a) => (
             <div
               key={a.id}
-              className="flex items-center justify-between rounded-xl border border-line px-4 py-3"
+              className="flex items-center justify-between py-3"
             >
               <div className="flex items-center gap-3">
                 <span className="h-2 w-2 rounded-full bg-accent" aria-label="active" />
@@ -190,7 +190,7 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
           ))}
           {active.length === 0 && pending.length === 0 && (
             <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-faint">
-              No agents yet — share the connect prompt below.
+              No agents yet — share the connect prompt above.
             </p>
           )}
         </div>

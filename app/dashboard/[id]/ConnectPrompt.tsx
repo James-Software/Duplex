@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import JoinCodeBox from "./JoinCodeBox";
 
 function CopyIcon({ className = "" }: { className?: string }) {
   return (
@@ -124,11 +125,19 @@ export default function ConnectPrompt({
   joinCode,
   username,
   workspaceName,
+  workspaceId,
+  expires,
+  autoRegenerate,
+  onRegenerated,
 }: {
   appUrl: string;
   joinCode: string;
   username: string;
   workspaceName: string;
+  workspaceId: string;
+  expires: string;
+  autoRegenerate: boolean;
+  onRegenerated: (newCode: string, newExpires: string) => void;
 }) {
   const [agentName, setAgentName] = useState(readAgentNameCookie);
   const effectiveName = agentName.trim() ? agentName.trim() : DEFAULT_AGENT_NAME;
@@ -148,7 +157,14 @@ export default function ConnectPrompt({
       <p className="mt-1 text-sm text-muted">
         Paste this prompt into the agent. It connects, joins, and waits for your approval.
       </p>
-      <label className="mt-4 block">
+      <JoinCodeBox
+        workspaceId={workspaceId}
+        code={joinCode}
+        expires={expires}
+        autoRegenerate={autoRegenerate}
+        onRegenerated={onRegenerated}
+      />
+      <label className="mt-5 block">
         <span className="text-sm font-medium text-ink">Agent name</span>
         <input
           value={agentName}
@@ -159,7 +175,7 @@ export default function ConnectPrompt({
           className="mt-1.5 w-full rounded-xl border border-line bg-card px-4 py-2.5 text-sm text-ink placeholder:text-faint outline-none focus:border-accent"
         />
       </label>
-      <pre className="mt-3 max-h-72 overflow-auto rounded-xl bg-ink p-4 font-mono text-xs leading-relaxed text-neutral-200 whitespace-pre-wrap">
+      <pre className="mt-4 max-h-72 overflow-auto rounded-xl bg-ink p-4 font-mono text-xs leading-relaxed text-neutral-200 whitespace-pre-wrap">
         {prompt}
       </pre>
     </div>

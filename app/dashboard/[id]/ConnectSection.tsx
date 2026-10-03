@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import JoinCodeBox from "./JoinCodeBox";
 import ConnectPrompt from "./ConnectPrompt";
 
 /**
- * Owns the join-code state so regenerating the code updates both the code box
- * and the agent prompt below it.
+ * Owns the join-code state so regenerating the code updates both the code
+ * pill and the agent prompt inside the single "Connect an agent" card.
  */
 export default function ConnectSection({
   workspaceId,
@@ -69,22 +68,17 @@ export default function ConnectSection({
   }, [active, workspaceId, applyCode]);
 
   return (
-    <>
-      <JoinCodeBox
-        workspaceId={workspaceId}
-        code={code}
-        expires={expires}
-        autoRegenerate={active}
-        onRegenerated={(newCode, newExpires) => {
-          applyCode(newCode, newExpires);
-        }}
-      />
-      <ConnectPrompt
-        appUrl={appUrl}
-        joinCode={code}
-        username={username}
-        workspaceName={workspaceName}
-      />
-    </>
+    <ConnectPrompt
+      appUrl={appUrl}
+      joinCode={code}
+      username={username}
+      workspaceName={workspaceName}
+      workspaceId={workspaceId}
+      expires={expires}
+      autoRegenerate={active}
+      onRegenerated={(newCode, newExpires) => {
+        applyCode(newCode, newExpires);
+      }}
+    />
   );
 }
