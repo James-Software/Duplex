@@ -43,8 +43,8 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
     async function poll() {
       try {
         const [teamRes, feedRes] = await Promise.all([
-          fetch(`/api/workspaces/${workspaceId}/team`),
-          fetch(`/api/workspaces/${workspaceId}/feed`),
+          fetch(`/api/workspaces/${workspaceId}/team`, { credentials: "same-origin" }),
+          fetch(`/api/workspaces/${workspaceId}/feed`, { credentials: "same-origin" }),
         ]);
         if (cancelled) return;
         if (teamRes.ok) setAgents(((await teamRes.json()).agents ?? []) as Agent[]);
@@ -65,8 +65,8 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
   async function refresh() {
     try {
       const [teamRes, feedRes] = await Promise.all([
-        fetch(`/api/workspaces/${workspaceId}/team`),
-        fetch(`/api/workspaces/${workspaceId}/feed`),
+        fetch(`/api/workspaces/${workspaceId}/team`, { credentials: "same-origin" }),
+        fetch(`/api/workspaces/${workspaceId}/feed`, { credentials: "same-origin" }),
       ]);
       if (teamRes.ok) setAgents(((await teamRes.json()).agents ?? []) as Agent[]);
       if (feedRes.ok) setFeed(((await feedRes.json()).feed ?? []) as FeedItem[]);
@@ -80,6 +80,7 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
     try {
       await fetch(`/api/workspaces/${workspaceId}/team`, {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ agent_id: agentId, action }),
       });
