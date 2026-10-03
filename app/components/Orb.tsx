@@ -2,9 +2,9 @@
 
 import { useEffect, useRef } from "react";
 
-const PARTICLE_COUNT = 300;
+const PARTICLE_COUNT = 350;
 const DOT_COLOR = "#16a34a";
-const DOT_RADIUS = 2.2;
+const DOT_RADIUS = 3;
 const FOLLOW_LERP = 0.025; // slow, dreamy trailing
 const SUCK_LERP = 0.09; // smooth in/out
 const VANISH_RADIUS = 70; // fade out within this distance of the cursor
@@ -16,6 +16,11 @@ type Particle = {
   phase: number;
   wobble: number;
   stagger: number; // per-particle stream delay, deterministic
+  drift: number; // radial dispersal amount, deterministic
+  swirl: number; // per-particle swirl direction, deterministic
+  tanX: number;
+  tanY: number;
+  tanZ: number;
 };
 
 /** Evenly distribute points on a unit sphere. */
@@ -40,9 +45,10 @@ function hash01(i: number, salt: number): number {
 }
 
 /**
- * Fixed full-viewport backdrop: an orb made of many orbs.
- * ~300 identical solid-green dots on a slowly rotating, breathing 3D sphere,
- * projected to 2D on a transparent canvas over the light page surface.
+ * Fixed full-viewport backdrop: an Antigravity-style breathing point-cloud sphere.
+ * ~350 identical solid-green dots on a slowly rotating 3D sphere, projected to 2D
+ * on a transparent canvas over the light page surface. The signature motion is a
+ * slow gather/disperse loop: tight dense shell <-> wide drifting cloud.
  * The orb trails the cursor; hovering any button/link sucks every dot
  * into the mouse, where they stream in and vanish.
  */
@@ -118,6 +124,11 @@ export default function Orb() {
       phase: hash01(i, 13) * Math.PI * 2,
       wobble: 0.75 + hash01(i, 29) * 0.5,
       stagger: hash01(i, 41),
+      drift: 0.55 + hash01(i, 47) * 0.5,
+      swirl: hash01(i, 97) * 2 - 1,
+      tanX: hash01(i, 51) * 2 - 1,
+      tanY: hash01(i, 67) * 2 - 1,
+      tanZ: hash01(i, 83) * 2 - 1,
     }));
 
     const draw = (t: number) => {
@@ -132,15 +143,24 @@ export default function Orb() {
       // Ease the suck factor in/out — no popping.
       suck += ((hoveringControl ? 1 : 0) - suck) * SUCK_LERP;
 
-      const baseR = Math.min(w, h) * 0.3;
-      // Breathing: layered slow sines (~5s and ~7.3s periods). Never jittery.
+      // Large and centered: diameter ~70% of the smaller viewport dimension.
+      const baseR = Math.min(w, h) * 0.35;
+
+      // The Antigravity signature: slow gather/disperse loop.
+      // 0 = tight dense shell, 1 = wide drifting cloud. ~11s loop, shaped
+      // to linger in the tight state and bloom outward gracefully.
+      const dcycle = (t / 11000) * Math.PI * 2 - Math.PI / 2;
+      let disperse = 0.5 + 0.5 * Math.sin(dcycle);
+      disperse = Math.pow(disperse, 1.6);
+
+      // Subtle breathing on top of the dispersal (~5s and ~7.3s periods).
       const breathe =
         1 +
-        0.055 * Math.sin((t / 5000) * Math.PI * 2) +
-        0.028 * Math.sin((t / 7300) * Math.PI * 2 + 1.7);
+        0.05 * Math.sin((t / 5000) * Math.PI * 2) +
+        0.025 * Math.sin((t / 7300) * Math.PI * 2 + 1.7);
       const R = baseR * breathe;
 
-      // Very slow rotation.
+      // Very slow rotation underneath.
       const rotY = (t / 26000) * Math.PI * 2;
       const rotX = 0.35 + 0.08 * Math.sin((t / 11000) * Math.PI * 2);
       const cosY = Math.cos(rotY);
@@ -152,10 +172,25 @@ export default function Orb() {
       ctx.fillStyle = DOT_COLOR;
 
       for (const p of particles) {
+        // Swirl: extra Y-rotation proportional to dispersal (cloud swirl).
+        const sw = disperse * p.swirl * 0.9;
+        const csw = Math.cos(sw);
+        const ssw = Math.sin(sw);
+        const xw = p.x * csw + p.z * ssw;
+        const zw = -p.x * ssw + p.z * csw;
+
+        // Radial expansion + tangential scatter: tight shell -> drifting cloud.
+        const rad = 1 + disperse * p.drift;
+        let x = (xw + p.tanX * disperse * 0.45) * rad;
+        let y = (p.y + p.tanY * disperse * 0.45) * rad;
+        let z = (zw + p.tanZ * disperse * 0.45) * rad;
+
+        // Subtle per-particle wobble. Never jittery.
         const wob = 1 + 0.045 * Math.sin((t / 3800) * p.wobble + p.phase);
-        const x = p.x * wob;
-        const y = p.y * wob;
-        const z = p.z * wob;
+        x *= wob;
+        y *= wob;
+        z *= wob;
+
         // Rotate around Y, then X; project to 2D.
         const x1 = x * cosY + z * sinY;
         const z1 = -x * sinY + z * cosY;
