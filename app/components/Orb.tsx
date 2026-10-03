@@ -4,10 +4,13 @@ import { useEffect, useRef } from "react";
 
 const PARTICLE_COUNT = 350;
 const DOT_COLOR = "#16a34a";
-const DOT_RADIUS = 3;
+const DASH_LEN = 7; // fixed for every particle — "same size" is the rule
+const DASH_HALF = DASH_LEN / 2;
+const DASH_WIDTH = 2.5;
 const FOLLOW_LERP = 0.025; // slow, dreamy trailing
 const SUCK_LERP = 0.09; // smooth in/out
 const VANISH_RADIUS = 70; // fade out within this distance of the cursor
+const VELOCITY_WINDOW = 6; // frames between velocity samples (~100ms)
 
 type Particle = {
   x: number;
@@ -46,11 +49,12 @@ function hash01(i: number, salt: number): number {
 
 /**
  * Fixed full-viewport backdrop: an Antigravity-style breathing point-cloud sphere.
- * ~350 identical solid-green dots on a slowly rotating 3D sphere, projected to 2D
- * on a transparent canvas over the light page surface. The signature motion is a
- * slow gather/disperse loop: tight dense shell <-> wide drifting cloud.
- * The orb trails the cursor; hovering any button/link sucks every dot
- * into the mouse, where they stream in and vanish.
+ * ~350 identical solid-green dashes on a slowly rotating 3D sphere, projected to 2D
+ * on a transparent canvas over the light page surface. Each dash is aligned to the
+ * particle's own velocity vector, so the field reads as a flowing current.
+ * The signature motion is a slow gather/disperse loop: tight dense shell <->
+ * wide drifting cloud. The orb trails the cursor; hovering any button/link sucks
+ * every dash into the mouse, where they stream in and vanish.
  */
 export default function Orb() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -74,6 +78,15 @@ export default function Orb() {
     let mouseInWindow = false;
     let hoveringControl = false;
     let suck = 0;
+
+    // Velocity tracking: screen-space positions now vs VELOCITY_WINDOW frames
+    // ago give each dash a stable drift direction. dirs holds the last known
+    // unit direction per particle (deterministic hash fallback while still).
+    const positions = new Float32Array(PARTICLE_COUNT * 2);
+    const oldPositions = new Float32Array(PARTICLE_COUNT * 2);
+    const dirs = new Float32Array(PARTICLE_COUNT * 2);
+    let frame = 0;
+    let primed = false;
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -131,6 +144,13 @@ export default function Orb() {
       tanZ: hash01(i, 83) * 2 - 1,
     }));
 
+    // Deterministic fallback dash directions (used before velocity exists).
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const a = hash01(i, 101) * Math.PI * 2;
+      dirs[i * 2] = Math.cos(a);
+      dirs[i * 2 + 1] = Math.sin(a);
+    }
+
     const draw = (t: number) => {
       ctx.clearRect(0, 0, w, h);
 
@@ -169,9 +189,12 @@ export default function Orb() {
       const sinX = Math.sin(rotX);
       const focal = R * 3.4;
 
-      ctx.fillStyle = DOT_COLOR;
+      ctx.strokeStyle = DOT_COLOR;
+      ctx.lineWidth = DASH_WIDTH;
+      ctx.lineCap = "round";
 
-      for (const p of particles) {
+      for (let pi = 0; pi < particles.length; pi++) {
+        const p = particles[pi];
         // Swirl: extra Y-rotation proportional to dispersal (cloud swirl).
         const sw = disperse * p.swirl * 0.9;
         const csw = Math.cos(sw);
@@ -210,12 +233,40 @@ export default function Orb() {
         const alpha = 1 - si * (1 - Math.min(1, d / VANISH_RADIUS));
 
         if (alpha <= 0.01) continue;
+
+        // Dash orientation: align to the particle's own velocity vector over
+        // the sampling window. Fixed length — never scaled by speed.
+        positions[pi * 2] = px;
+        positions[pi * 2 + 1] = py;
+        let dx = px - oldPositions[pi * 2];
+        let dy = py - oldPositions[pi * 2 + 1];
+        const mag = Math.hypot(dx, dy);
+        if (mag > 0.2) {
+          dx /= mag;
+          dy /= mag;
+          dirs[pi * 2] = dx;
+          dirs[pi * 2 + 1] = dy;
+        } else {
+          dx = dirs[pi * 2];
+          dy = dirs[pi * 2 + 1];
+        }
+
         ctx.globalAlpha = alpha;
         ctx.beginPath();
-        ctx.arc(px, py, DOT_RADIUS, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(px - dx * DASH_HALF, py - dy * DASH_HALF);
+        ctx.lineTo(px + dx * DASH_HALF, py + dy * DASH_HALF);
+        ctx.stroke();
       }
       ctx.globalAlpha = 1;
+
+      // Refresh the velocity baseline every VELOCITY_WINDOW frames.
+      frame++;
+      if (!primed) {
+        oldPositions.set(positions);
+        primed = true;
+      } else if (frame % VELOCITY_WINDOW === 0) {
+        oldPositions.set(positions);
+      }
     };
 
     if (reducedMotion) {
