@@ -4,13 +4,14 @@ import { useEffect, useRef } from "react";
 
 const PARTICLE_COUNT = 350;
 const DOT_COLOR = "#16a34a";
-const DASH_LEN = 7; // fixed for every particle — "same size" is the rule
+const DASH_LEN = 5; // fixed for every particle — "same size" is the rule
 const DASH_HALF = DASH_LEN / 2;
-const DASH_WIDTH = 2.5;
+const DASH_W_NEAR = 3; // stroke width at the cursor
+const DASH_W_FAR = 1.5; // stroke width far from the cursor
 const FOLLOW_LERP = 0.025; // slow, dreamy trailing
-const SUCK_LERP = 0.09; // smooth in/out
+const SUCK_IN_LERP = 0.12; // quick grab when hovering a control
+const SUCK_OUT_LERP = 0.028; // long gentle release (~0.6s ease-out), no snap
 const VANISH_RADIUS = 70; // fade out within this distance of the cursor
-const VELOCITY_WINDOW = 6; // frames between velocity samples (~100ms)
 
 type Particle = {
   x: number;
@@ -50,8 +51,8 @@ function hash01(i: number, salt: number): number {
 /**
  * Fixed full-viewport backdrop: an Antigravity-style breathing point-cloud sphere.
  * ~350 identical solid-green dashes on a slowly rotating 3D sphere, projected to 2D
- * on a transparent canvas over the light page surface. Each dash is aligned to the
- * particle's own velocity vector, so the field reads as a flowing current.
+ * on a transparent canvas over the light page surface. Every dash points at the
+ * cursor like iron filings to a magnet.
  * The signature motion is a slow gather/disperse loop: tight dense shell <->
  * wide drifting cloud. The orb trails the cursor; hovering any button/link sucks
  * every dash into the mouse, where they stream in and vanish.
@@ -79,14 +80,9 @@ export default function Orb() {
     let hoveringControl = false;
     let suck = 0;
 
-    // Velocity tracking: screen-space positions now vs VELOCITY_WINDOW frames
-    // ago give each dash a stable drift direction. dirs holds the last known
-    // unit direction per particle (deterministic hash fallback while still).
-    const positions = new Float32Array(PARTICLE_COUNT * 2);
-    const oldPositions = new Float32Array(PARTICLE_COUNT * 2);
+    // Radial orientation state: dirs holds each dash's last known unit
+    // direction toward the cursor (deterministic hash fallback while unset).
     const dirs = new Float32Array(PARTICLE_COUNT * 2);
-    let frame = 0;
-    let primed = false;
 
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -160,8 +156,12 @@ export default function Orb() {
       cx += (tx - cx) * FOLLOW_LERP;
       cy += (ty - cy) * FOLLOW_LERP;
 
-      // Ease the suck factor in/out — no popping.
-      suck += ((hoveringControl ? 1 : 0) - suck) * SUCK_LERP;
+      // Ease the suck factor: fast grab on hover, long gentle ease-out on
+      // release. Snap exactly to 0 at the tail so there's no endless drift.
+      const suckTarget = hoveringControl ? 1 : 0;
+      const suckLerp = suckTarget > suck ? SUCK_IN_LERP : SUCK_OUT_LERP;
+      suck += (suckTarget - suck) * suckLerp;
+      if (!hoveringControl && suck < 0.002) suck = 0;
 
       // Large and centered: diameter ~70% of the smaller viewport dimension.
       const baseR = Math.min(w, h) * 0.35;
@@ -190,8 +190,8 @@ export default function Orb() {
       const focal = R * 3.4;
 
       ctx.strokeStyle = DOT_COLOR;
-      ctx.lineWidth = DASH_WIDTH;
       ctx.lineCap = "round";
+      const diag = Math.hypot(w, h); // width falloff normalizer
 
       for (let pi = 0; pi < particles.length; pi++) {
         const p = particles[pi];
@@ -234,14 +234,12 @@ export default function Orb() {
 
         if (alpha <= 0.01) continue;
 
-        // Dash orientation: align to the particle's own velocity vector over
-        // the sampling window. Fixed length — never scaled by speed.
-        positions[pi * 2] = px;
-        positions[pi * 2 + 1] = py;
-        let dx = px - oldPositions[pi * 2];
-        let dy = py - oldPositions[pi * 2 + 1];
+        // Radial orientation: every dash points at the cursor like iron
+        // filings to a magnet. Fixed length — never scaled by distance.
+        let dx = mouseX - px;
+        let dy = mouseY - py;
         const mag = Math.hypot(dx, dy);
-        if (mag > 0.2) {
+        if (mag > 0.001) {
           dx /= mag;
           dy /= mag;
           dirs[pi * 2] = dx;
@@ -252,21 +250,16 @@ export default function Orb() {
         }
 
         ctx.globalAlpha = alpha;
+        // Stroke width falls off smoothly with cursor distance:
+        // ~3px near the mouse, ~1.5px far away. Length stays uniform.
+        const wt = Math.min(1, d / diag);
+        ctx.lineWidth = DASH_W_FAR + (DASH_W_NEAR - DASH_W_FAR) * (1 - wt) * (1 - wt);
         ctx.beginPath();
         ctx.moveTo(px - dx * DASH_HALF, py - dy * DASH_HALF);
         ctx.lineTo(px + dx * DASH_HALF, py + dy * DASH_HALF);
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
-
-      // Refresh the velocity baseline every VELOCITY_WINDOW frames.
-      frame++;
-      if (!primed) {
-        oldPositions.set(positions);
-        primed = true;
-      } else if (frame % VELOCITY_WINDOW === 0) {
-        oldPositions.set(positions);
-      }
     };
 
     if (reducedMotion) {
