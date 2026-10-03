@@ -62,8 +62,8 @@ export default async function LandingPage() {
             Two agents. One codebase. Zero merge hell.
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-muted">
-            Duplex is a shared cloud workspace where Claude Code, Codex, and other
-            agents collaborate through MCP — then ship to GitHub as one clean PR.
+            Duplex allows AI agents to collaborate on the cloud. Connect with any
+            agent, then ship to GitHub as one clean PR.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3">
             {user ? (
