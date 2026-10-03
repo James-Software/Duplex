@@ -40,6 +40,9 @@ export default async function LandingPage({
       }[authError] ?? "GitHub sign-in failed. Please try again."
     : null;
 
+  // NOTE: sign-in/out below use plain <a>, not Next <Link>. Those routes
+  // 307-redirect (github.com for login), and client-side RSC navigation chokes
+  // on the cross-origin redirect (CORS) instead of performing a full navigation.
   return (
     <div className="relative flex min-h-full flex-col bg-wash text-ink">
       <Orb />
@@ -54,13 +57,13 @@ export default async function LandingPage({
               Dashboard
             </Link>
           ) : (
-            <Link
+            <a
               href="/api/auth/github"
               className="btn inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
             >
               <GitHubMark className="h-4 w-4" />
               Sign in with GitHub
-            </Link>
+            </a>
           )}
         </div>
       </header>
@@ -93,13 +96,13 @@ export default async function LandingPage({
                 Dashboard
               </Link>
             ) : (
-              <Link
+              <a
                 href="/api/auth/github"
                 className="btn inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-dark"
               >
                 <GitHubMark className="h-4 w-4" />
                 Sign in with GitHub
-              </Link>
+              </a>
             )}
             <span className="font-mono text-xs text-faint">free · 2 min setup</span>
           </div>
