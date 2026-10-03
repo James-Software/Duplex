@@ -26,11 +26,26 @@ export async function GET(
     .eq("workspace_id", id)
     .order("created_at", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  // A stale current_path must never render as "editing" — same 5-minute
-  // recency rule as get_team_status.
-  const agents = ((data ?? []) as { current_path: string | null; last_seen: string | null }[]).map(
-    (a) => ({ ...a, current_path: isRecentlyActive(a.last_seen) ? a.current_path : null })
-  );
+  // "Editing" is driven by real edit history, not agent activity: an agent
+  // shows as editing the path of its most recent edit, only within the
+  // 5-minute activity window — same rule as get_team_status.
+  const { data: editRows } = await supabaseAdmin()
+    .from("edits")
+    .select("agent_id, path, created_at")
+    .eq("workspace_id", id)
+    .order("created_at", { ascending: false })
+    .limit(1000);
+  const latestEditByAgent = new Map<string, { path: string; created_at: string }>();
+  for (const e of (editRows ?? []) as { agent_id: string; path: string; created_at: string }[]) {
+    if (!latestEditByAgent.has(e.agent_id)) latestEditByAgent.set(e.agent_id, e);
+  }
+  const agents = ((data ?? []) as { id: string; current_path: string | null }[]).map((a) => {
+    const lastEdit = latestEditByAgent.get(a.id);
+    return {
+      ...a,
+      current_path: lastEdit && isRecentlyActive(lastEdit.created_at) ? lastEdit.path : null,
+    };
+  });
   return NextResponse.json({ agents, owner_github_id: user.github_id });
 }
 

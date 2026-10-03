@@ -203,16 +203,33 @@ export function registerDuplexTools(server: McpServer) {
         .single();
       const { data: teamRows } = await db
         .from("agents")
-        .select("name, client_type, status, current_task, current_path, username_label, last_seen")
+        .select("id, name, client_type, status, current_task, username_label")
         .eq("workspace_id", agent.workspace_id)
         .order("created_at", { ascending: true });
+      // "Editing" is driven by real edit history, not agent activity: the
+      // edits table records every mutation, so an agent shows as editing the
+      // path of its most recent edit — but only within the activity window.
+      const { data: editRows } = await db
+        .from("edits")
+        .select("agent_id, path, created_at")
+        .eq("workspace_id", agent.workspace_id)
+        .order("created_at", { ascending: false })
+        .limit(1000);
+      const latestEditByAgent = new Map<string, { path: string; created_at: string }>();
+      for (const e of (editRows ?? []) as { agent_id: string; path: string; created_at: string }[]) {
+        if (!latestEditByAgent.has(e.agent_id)) latestEditByAgent.set(e.agent_id, e);
+      }
       const team = ((teamRows ?? []) as Partial<DbAgent>[])
-        .map(
-          (t) =>
+        .map((t) => {
+          const lastEdit = t.id ? latestEditByAgent.get(t.id) : undefined;
+          const editing =
+            lastEdit && isRecentlyActive(lastEdit.created_at) ? ` · editing ${lastEdit.path}` : "";
+          return (
             `• ${t.name} (${t.client_type}${t.username_label ? `, ${t.username_label}` : ""}) — ${t.status}` +
-            (t.current_path && isRecentlyActive(t.last_seen) ? ` · editing ${t.current_path}` : "") +
+            editing +
             (t.current_task ? ` · ${t.current_task}` : "")
-        )
+          );
+        })
         .join("\n");
       const ws = wsRow as { id: string; name: string; github_repo: string; github_base_branch: string };
 
