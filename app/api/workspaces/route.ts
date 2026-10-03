@@ -10,7 +10,7 @@ export async function GET() {
   return NextResponse.json({ workspaces });
 }
 
-/** POST /api/workspaces — create a workspace. Body: { name, github_repo, github_base_branch? } */
+/** POST /api/workspaces — create a session bound to a repo. Body: { github_repo, name?, github_base_branch? } */
 export async function POST(request: Request) {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   }
   try {
     const workspace = await createWorkspace(user, {
-      name: body.name ?? "",
+      name: body.name,
       github_repo: body.github_repo ?? "",
       github_base_branch: body.github_base_branch,
     });
