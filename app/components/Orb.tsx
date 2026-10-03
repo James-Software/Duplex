@@ -4,10 +4,13 @@ import { useEffect, useRef } from "react";
 
 const PARTICLE_COUNT = 350;
 const DOT_COLOR = "#16a34a";
-const DASH_LEN = 5; // fixed for every particle — "same size" is the rule
+// Master scale: the whole orb (radius, dashes, strokes) scales together so
+// visual proportions stay balanced — "scales properly".
+const ORB_SCALE = 0.72; // ~28% smaller
+const DASH_LEN = 5 * ORB_SCALE; // fixed for every particle — "same size" is the rule
 const DASH_HALF = DASH_LEN / 2;
-const DASH_W_NEAR = 3; // stroke width at the cursor
-const DASH_W_FAR = 1.5; // stroke width far from the cursor
+const DASH_W_NEAR = 3 * ORB_SCALE; // stroke width at the cursor
+const DASH_W_FAR = 1.5 * ORB_SCALE; // stroke width far from the cursor
 const DEPTH_NORM = 1.6; // sphere-space z range for depth normalization
 const DEPTH_SCALE_MIN = 0.7; // dash scale at the back of the sphere
 const DEPTH_SCALE_MAX = 1.3; // dash scale at the front of the sphere
@@ -62,6 +65,9 @@ function hash01(i: number, salt: number): number {
  * every dash into the mouse, where they stream in and vanish. Subtle 3D depth
  * cueing: dashes nearer the viewer render slightly larger and more opaque,
  * farther ones smaller and fainter — the sphere reads as a volume.
+ * Compact by design: the whole orb (radius, dashes, strokes) is scaled to
+ * ~72% via ORB_SCALE so it sits lighter on the page while keeping the exact
+ * same visual proportions.
  */
 export default function Orb() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -169,8 +175,11 @@ export default function Orb() {
       suck += (suckTarget - suck) * suckLerp;
       if (!hoveringControl && suck < 0.002) suck = 0;
 
-      // Large and centered: diameter ~70% of the smaller viewport dimension.
-      const baseR = Math.min(w, h) * 0.35;
+      // Compact and refined: diameter ~50% of the smaller viewport dimension.
+      // The dispersal spread scales with the radius automatically (positions
+      // are unit-sphere space multiplied by R below), so the cloud stays
+      // proportional — everything scales together via ORB_SCALE.
+      const baseR = Math.min(w, h) * 0.35 * ORB_SCALE;
 
       // The Antigravity signature: slow gather/disperse loop.
       // 0 = tight dense shell, ~0.7 = contained drifting cloud. ~11s loop,
@@ -273,9 +282,10 @@ export default function Orb() {
         }
 
         ctx.globalAlpha = alpha;
-        // Stroke width falls off smoothly with cursor distance:
-        // ~3px near the mouse, ~1.5px far away. Length is scaled by depth
-        // so the sphere reads as a volume; width stays the cursor cue.
+        // Stroke width falls off smoothly with cursor distance (scaled by
+        // ORB_SCALE along with everything else): wider near the mouse,
+        // thinner far away. Length is scaled by depth so the sphere reads
+        // as a volume; width stays the cursor cue.
         const wt = Math.min(1, d / diag);
         ctx.lineWidth = DASH_W_FAR + (DASH_W_NEAR - DASH_W_FAR) * (1 - wt) * (1 - wt);
         const half = DASH_HALF * depthScale;
