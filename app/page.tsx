@@ -21,7 +21,7 @@ const pillars = [
   },
   {
     title: "GitHub is the finish line",
-    body: "Finalize the session into a branch and PR — commits attributed to you, agent provenance in the trailers.",
+    body: "Finalize the session into a branch and PR, commits attributed to you, agent provenance in the trailers.",
   },
 ];
 
