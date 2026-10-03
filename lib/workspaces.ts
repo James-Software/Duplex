@@ -20,25 +20,24 @@ export function joinCodeExpiry(): string {
 const REPO_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 export interface CreateWorkspaceInput {
-  name: string;
+  /** Optional — defaults to the repo name (the part after "/"). */
+  name?: string;
   github_repo: string;
+  /** Optional — auto-detected from the repo's default branch when omitted. */
   github_base_branch?: string;
 }
 
 /**
- * Create a workspace: validates the repo/branch against the GitHub API
- * (using the creator's OAuth token) and records the base SHA the
- * cloud filesystem starts from.
+ * Create a workspace (a collaboration session bound to one GitHub repo).
+ * Validates the repo/branch against the GitHub API (using the creator's
+ * OAuth token) and records the base SHA the cloud filesystem starts from.
+ * One active session per repo — throws if one already exists.
  */
 export async function createWorkspace(
   user: DbUser,
   input: CreateWorkspaceInput
 ): Promise<DbWorkspace> {
-  const name = input.name.trim();
   const repo = input.github_repo.trim();
-  const branch = (input.github_base_branch ?? "main").trim() || "main";
-
-  if (!name) throw new Error("Workspace name is required.");
   if (!REPO_PATTERN.test(repo)) {
     throw new Error('Repository must look like "owner/repo".');
   }
@@ -46,7 +45,28 @@ export async function createWorkspace(
     throw new Error("GitHub token missing — please sign in again.");
   }
 
-  // Confirm the repo and branch exist; capture the base commit SHA.
+  const existing = await getActiveWorkspaceByRepo(user.id, repo);
+  if (existing) {
+    throw new Error("A session already exists for this repository.");
+  }
+
+  // Resolve the base branch: explicit choice wins, otherwise the repo default.
+  let branch = (input.github_base_branch ?? "").trim();
+  if (!branch) {
+    try {
+      const info = (await githubApi(
+        user.github_token,
+        `/repos/${repo}`
+      )) as { default_branch?: string };
+      branch = info.default_branch || "main";
+    } catch {
+      throw new Error(`Could not find repository "${repo}". Check the name.`);
+    }
+  }
+
+  const name = (input.name ?? "").trim() || repo.split("/")[1] || repo;
+
+  // Confirm the branch exists; capture the base commit SHA.
   let branchInfo: { commit: { sha: string } };
   try {
     branchInfo = (await githubApi(
@@ -99,6 +119,24 @@ export async function getWorkspaceForUser(
     .eq("id", workspaceId)
     .eq("created_by", userId)
     .single();
+  if (error || !data) return null;
+  return data as DbWorkspace;
+}
+
+/** The active session bound to a repo, if any — one session per repo. */
+export async function getActiveWorkspaceByRepo(
+  userId: string,
+  repo: string
+): Promise<DbWorkspace | null> {
+  const { data, error } = await supabaseAdmin()
+    .from("workspaces")
+    .select("*")
+    .eq("created_by", userId)
+    .eq("github_repo", repo)
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   if (error || !data) return null;
   return data as DbWorkspace;
 }

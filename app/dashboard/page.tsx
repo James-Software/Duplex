@@ -2,12 +2,37 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getUserWorkspaces } from "@/lib/workspaces";
-import CreateWorkspaceForm from "./CreateWorkspaceForm";
+import { githubApi, type GitHubRepo } from "@/lib/github";
+import RepoList from "./RepoList";
 
 export default async function DashboardPage() {
   const user = await getSessionUser();
   if (!user) redirect("/");
+
+  let repos: GitHubRepo[] = [];
+  let reposError: string | null = null;
+  if (!user.github_token) {
+    reposError = "GitHub token missing — please sign out and sign in again.";
+  } else {
+    try {
+      repos = (await githubApi(
+        user.github_token,
+        "/user/repos?per_page=100&sort=updated"
+      )) as GitHubRepo[];
+    } catch {
+      reposError =
+        "Could not load your repositories. Your GitHub token may have expired — try signing out and back in.";
+    }
+  }
+
+  // One session per repo: map each repo to its active session, if any.
   const workspaces = await getUserWorkspaces(user.id);
+  const sessions: Record<string, string> = {};
+  for (const ws of workspaces) {
+    if (ws.status === "active" && !sessions[ws.github_repo]) {
+      sessions[ws.github_repo] = ws.id;
+    }
+  }
 
   return (
     <div className="min-h-full bg-wash text-ink">
@@ -27,43 +52,18 @@ export default async function DashboardPage() {
       </header>
 
       <main className="mx-auto w-full max-w-5xl px-6 py-10">
-        <h1 className="font-display text-3xl font-bold tracking-tight">Workspaces</h1>
+        <h1 className="font-display text-3xl font-bold tracking-tight">Repositories</h1>
         <p className="mt-1 text-sm text-muted">
-          Each workspace is a shared cloud repo your agents collaborate in.
+          Every session is a GitHub repository — pick one to start collaborating.
         </p>
 
         <div className="mt-8">
-          <CreateWorkspaceForm />
-        </div>
-
-        <div className="mt-8 grid gap-4">
-          {workspaces.map((ws) => (
-            <Link
-              key={ws.id}
-              href={`/dashboard/${ws.id}`}
-              className="btn block rounded-2xl border border-line bg-card p-5 hover:border-accent"
-            >
-              <div className="flex items-center justify-between">
-                <h2 className="font-display text-lg font-semibold">{ws.name}</h2>
-                <span
-                  className={`rounded-full px-2.5 py-1 font-mono text-xs ${
-                    ws.status === "active"
-                      ? "bg-accent-soft text-accent-dark"
-                      : "bg-neutral-100 text-muted"
-                  }`}
-                >
-                  {ws.status}
-                </span>
-              </div>
-              <p className="mt-1 font-mono text-xs text-muted">
-                {ws.github_repo} · {ws.github_base_branch} @ {ws.github_base_sha?.slice(0, 7)}
-              </p>
-            </Link>
-          ))}
-          {workspaces.length === 0 && (
-            <p className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-faint">
-              No workspaces yet — create one above to get started.
+          {reposError ? (
+            <p className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-red-600">
+              {reposError}
             </p>
+          ) : (
+            <RepoList repos={repos} sessions={sessions} />
           )}
         </div>
       </main>

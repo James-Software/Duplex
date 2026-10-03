@@ -2,6 +2,17 @@
 
 const API = "https://api.github.com";
 
+/** Subset of the /user/repos payload we render on the dashboard. */
+export interface GitHubRepo {
+  full_name: string;
+  description: string | null;
+  language: string | null;
+  stargazers_count: number;
+  updated_at: string;
+  private: boolean;
+  default_branch: string;
+}
+
 export async function githubApi(
   token: string,
   path: string,
