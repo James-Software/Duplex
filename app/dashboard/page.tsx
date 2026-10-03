@@ -38,7 +38,7 @@ export default async function DashboardPage() {
     <div className="min-h-full bg-wash text-ink">
       <header className="border-b border-line bg-card">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
-          <span className="font-display text-xl font-bold tracking-tight">Duplex</span>
+          <Link href="/" className="font-display text-xl font-bold tracking-tight">Duplex</Link>
           <div className="flex items-center gap-4">
             <span className="font-mono text-xs text-muted">@{user.github_username}</span>
             <Link
