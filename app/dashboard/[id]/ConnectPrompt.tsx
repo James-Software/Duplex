@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import JoinCodeBox from "./JoinCodeBox";
 
 function CopyIcon({ className = "" }: { className?: string }) {
@@ -24,6 +24,17 @@ function ChevronIcon({ className = "" }: { className?: string }) {
   return (
     <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
       <path d="M4 6l4 4 4-4" />
+    </svg>
+  );
+}
+
+function RefreshIcon({ className = "", style }: { className?: string; style?: CSSProperties }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className} style={style} aria-hidden="true">
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+      <path d="M3 21v-5h5" />
     </svg>
   );
 }
@@ -64,6 +75,16 @@ function MorphCopyButton({ text }: { text: string }) {
 
 const AGENT_NAME_COOKIE = "duplex_agent_name";
 const DEFAULT_AGENT_NAME = "Unnamed Coding Agent";
+
+const RANDOM_AGENT_NAMES = [
+  "Pixel", "Bolt", "Echo", "Nova", "Cipher", "Byte", "Turbo", "Quartz",
+  "Vortex", "Ember", "Flux", "Onyx", "Zephyr", "Cobalt", "Drift", "Flint",
+  "Glitch", "Halo", "Ion", "Jolt", "Koda", "Lumen", "Mist", "Nimbus",
+  "Orbit", "Prism", "Quark", "Raven", "Sol", "Tango", "Umbra", "Vector",
+  "Wisp", "Xenon", "Yonder", "Zinc", "Ash", "Blaze", "Cinder", "Dune",
+  "Edge", "Fern", "Grove", "Harbor", "Iris", "Jade", "Kiln", "Lark",
+  "Maple", "North",
+];
 
 function readAgentNameCookie(): string {
   if (typeof document === "undefined") return DEFAULT_AGENT_NAME;
@@ -149,12 +170,20 @@ export default function ConnectPrompt({
 }) {
   const [agentName, setAgentName] = useState(readAgentNameCookie);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [spins, setSpins] = useState(0);
   const effectiveName = agentName.trim() ? agentName.trim() : DEFAULT_AGENT_NAME;
   const prompt = buildPrompt(appUrl, joinCode, username, workspaceName, effectiveName);
 
   function onNameChange(value: string) {
     setAgentName(value);
     writeAgentNameCookie(value);
+  }
+
+  function randomizeName() {
+    setSpins((s) => s + 1);
+    const options = RANDOM_AGENT_NAMES.filter((n) => n !== agentName.trim());
+    const pick = options[Math.floor(Math.random() * options.length)];
+    onNameChange(pick);
   }
 
   return (
@@ -170,13 +199,24 @@ export default function ConnectPrompt({
         autoRegenerate={autoRegenerate}
         onRegenerated={onRegenerated}
       />
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex items-center gap-2">
         <label
           htmlFor="duplex-agent-name"
           className="shrink-0 text-xs font-medium text-ink"
         >
           Agent name
         </label>
+        <button
+          onClick={randomizeName}
+          title="Random name"
+          aria-label="Generate a random agent name"
+          className="btn flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-line text-muted hover:border-ink hover:text-ink"
+        >
+          <RefreshIcon
+            className="h-3.5 w-3.5 transition-transform duration-300"
+            style={{ transform: `rotate(${spins * 180}deg)` }}
+          />
+        </button>
         <input
           id="duplex-agent-name"
           value={agentName}
