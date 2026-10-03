@@ -3,7 +3,7 @@ import { githubApi } from "./github";
 import type { DbUser, DbWorkspace } from "./db";
 
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no ambiguous chars
-const JOIN_CODE_TTL_MINUTES = 30;
+const JOIN_CODE_TTL_MINUTES = 5;
 
 /** Generate a code like "M7K4-P9Q2-X3B8-D5F6". */
 export function generateJoinCode(): string {
@@ -255,6 +255,7 @@ export async function regenerateJoinCode(
 ): Promise<DbWorkspace> {
   const ws = await getWorkspaceForUser(workspaceId, userId);
   if (!ws) throw new Error("Workspace not found.");
+  if (ws.status !== "active") throw new Error("Workspace is not active.");
   const { data, error } = await supabaseAdmin()
     .from("workspaces")
     .update({ join_code: generateJoinCode(), join_code_expires_at: joinCodeExpiry() })
