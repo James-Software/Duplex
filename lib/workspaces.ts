@@ -19,6 +19,96 @@ export function joinCodeExpiry(): string {
 
 const REPO_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
+// --- Repo seeding ------------------------------------------------------------
+// A session bound to a GitHub repo starts populated with that repo's files at
+// the base SHA, so agents see the real codebase instead of an empty workspace.
+
+const SEED_MAX_FILES = 200;
+const SEED_MAX_BYTES = 100_000; // ~100KB per file
+const SEED_CONCURRENCY = 15;
+
+/** Extensions we never seed (binary formats). SVG is text — keep it. */
+const SEED_SKIP_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "webp", "ico",
+  "mp4", "mov", "avi", "mkv", "webm",
+  "zip", "gz", "tar", "tgz", "bz2", "xz", "7z", "rar",
+  "pdf",
+  "woff", "woff2", "ttf", "eot", "otf",
+  "mp3", "wav", "ogg", "flac", "aac",
+  "exe", "dll", "so", "dylib", "class", "pyc", "pyo",
+  "bin", "dat", "db", "sqlite", "sqlite3",
+]);
+
+interface GhTreeEntry {
+  path: string;
+  type: string;
+  sha: string;
+  size?: number;
+}
+
+interface GhBlob {
+  content: string;
+  encoding: string;
+}
+
+/**
+ * Populate a new workspace with the repo's text files at the base SHA.
+ * Best-effort: any failure leaves the workspace as-is (possibly empty) and
+ * never throws — workspace creation must not fail because of seeding.
+ */
+async function seedWorkspaceFiles(
+  workspaceId: string,
+  repo: string,
+  baseSha: string,
+  token: string
+): Promise<void> {
+  const tree = (await githubApi(
+    token,
+    `/repos/${repo}/git/trees/${baseSha}?recursive=1`
+  )) as { tree: GhTreeEntry[] };
+
+  const candidates = tree.tree
+    .filter((e) => e.type === "blob")
+    .filter((e) => (e.size ?? 0) <= SEED_MAX_BYTES)
+    .filter((e) => {
+      const ext = e.path.split(".").pop()?.toLowerCase() ?? "";
+      return !SEED_SKIP_EXTENSIONS.has(ext);
+    })
+    .slice(0, SEED_MAX_FILES);
+
+  const rows: { workspace_id: string; path: string; content: string }[] = [];
+  for (let i = 0; i < candidates.length; i += SEED_CONCURRENCY) {
+    const batch = candidates.slice(i, i + SEED_CONCURRENCY);
+    const results = await Promise.all(
+      batch.map(async (entry) => {
+        try {
+          const blob = (await githubApi(
+            token,
+            `/repos/${repo}/git/blobs/${entry.sha}`
+          )) as GhBlob;
+          if (blob.encoding !== "base64" || !blob.content) return null;
+          const text = Buffer.from(blob.content, "base64").toString("utf8");
+          if (text.includes("\0")) return null; // binary sniff
+          return { workspace_id: workspaceId, path: entry.path, content: text };
+        } catch {
+          return null; // skip failed blobs; keep going
+        }
+      })
+    );
+    for (const r of results) if (r) rows.push(r);
+  }
+
+  if (rows.length === 0) return;
+
+  const db = supabaseAdmin();
+  for (let i = 0; i < rows.length; i += 100) {
+    const { error } = await db
+      .from("workspace_files")
+      .insert(rows.slice(i, i + 100));
+    if (error) throw new Error(`seed insert failed: ${error.message}`);
+  }
+}
+
 export interface CreateWorkspaceInput {
   /** Optional — defaults to the repo name (the part after "/"). */
   name?: string;
@@ -31,7 +121,9 @@ export interface CreateWorkspaceInput {
  * Create a workspace (a collaboration session bound to one GitHub repo).
  * Validates the repo/branch against the GitHub API (using the creator's
  * OAuth token) and records the base SHA the cloud filesystem starts from.
- * One active session per repo — throws if one already exists.
+ * The new workspace is seeded with the repo's files at the base SHA
+ * (best-effort; never fails creation). One active session per repo — throws
+ * if one already exists.
  */
 export async function createWorkspace(
   user: DbUser,
@@ -96,7 +188,22 @@ export async function createWorkspace(
   if (error || !data) {
     throw new Error(`Could not create workspace: ${error?.message ?? "unknown"}`);
   }
-  return data as DbWorkspace;
+  const workspace = data as DbWorkspace;
+
+  // Seed the cloud filesystem with the repo's files. Non-fatal: if seeding
+  // fails the workspace simply starts empty and agents create files from scratch.
+  try {
+    await seedWorkspaceFiles(
+      workspace.id,
+      repo,
+      branchInfo.commit.sha,
+      user.github_token
+    );
+  } catch {
+    // intentionally ignored
+  }
+
+  return workspace;
 }
 
 export async function getUserWorkspaces(userId: string): Promise<DbWorkspace[]> {
