@@ -60,7 +60,11 @@ export default async function WorkspacePage({
             workspaceName={ws.name}
             active={ws.status === "active"}
           />
-          <WorkspaceLive workspaceId={ws.id} />
+          <WorkspaceLive
+            workspaceId={ws.id}
+            workspaceName={ws.name}
+            isActive={ws.status === "active"}
+          />
           <FinalizeBox workspaceId={ws.id} finalized={ws.status === "finalized"} />
         </div>
       </main>

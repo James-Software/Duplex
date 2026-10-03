@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import JoinRequestModal from "./JoinRequestModal";
 
 interface Agent {
   id: string;
@@ -32,13 +33,39 @@ function timeOf(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour12: false });
 }
 
-export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) {
+export default function WorkspaceLive({
+  workspaceId,
+  workspaceName,
+  isActive,
+}: {
+  workspaceId: string;
+  workspaceName: string;
+  isActive: boolean;
+}) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [ownerGithubId, setOwnerGithubId] = useState<number | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [kickTarget, setKickTarget] = useState<Agent | null>(null);
   const [kickBusy, setKickBusy] = useState(false);
+  // Join-request modal queue: every unseen pending agent gets queued once,
+  // so a fresh request pops the modal open automatically.
+  const [queue, setQueue] = useState<Agent[]>([]);
+  const [modalBusy, setModalBusy] = useState<"approve" | "decline" | null>(null);
+  const seenIds = useRef<Set<string>>(new Set());
+
+  const ingestTeam = useCallback(
+    (next: Agent[]) => {
+      setAgents(next);
+      if (!isActive) return;
+      const fresh = next.filter((a) => a.status === "pending" && !seenIds.current.has(a.id));
+      if (fresh.length > 0) {
+        fresh.forEach((a) => seenIds.current.add(a.id));
+        setQueue((q) => [...q, ...fresh]);
+      }
+    },
+    [isActive]
+  );
 
   const avatarUrl = ownerGithubId
     ? `https://avatars.githubusercontent.com/u/${ownerGithubId}?v=4&s=64`
@@ -56,7 +83,7 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
         if (cancelled) return;
         if (teamRes.ok) {
           const json = await teamRes.json();
-          setAgents((json.agents ?? []) as Agent[]);
+          ingestTeam((json.agents ?? []) as Agent[]);
           if (typeof json.owner_github_id === "number") setOwnerGithubId(json.owner_github_id);
         }
         if (feedRes.ok) setFeed(((await feedRes.json()).feed ?? []) as FeedItem[]);
@@ -71,7 +98,7 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
       cancelled = true;
       clearInterval(t);
     };
-  }, [workspaceId]);
+  }, [workspaceId, ingestTeam]);
 
   async function refresh() {
     try {
@@ -81,7 +108,7 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
       ]);
       if (teamRes.ok) {
         const json = await teamRes.json();
-        setAgents((json.agents ?? []) as Agent[]);
+        ingestTeam((json.agents ?? []) as Agent[]);
         if (typeof json.owner_github_id === "number") setOwnerGithubId(json.owner_github_id);
       }
       if (feedRes.ok) setFeed(((await feedRes.json()).feed ?? []) as FeedItem[]);
@@ -103,6 +130,29 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
     } finally {
       setBusy(null);
     }
+  }
+
+  /** Decide from the join-request modal, then advance the queue. */
+  async function decideModal(agentId: string, action: "approve" | "decline") {
+    setModalBusy(action);
+    try {
+      await fetch(`/api/workspaces/${workspaceId}/team`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_id: agentId, action }),
+      });
+      await refresh();
+    } finally {
+      setModalBusy(null);
+      setQueue((q) => q.slice(1));
+    }
+  }
+
+  /** Re-open the modal for a pending agent (moves it to the front, deduped). */
+  function requeue(agent: Agent) {
+    seenIds.current.add(agent.id);
+    setQueue((q) => [agent, ...q.filter((x) => x.id !== agent.id)]);
   }
 
   async function kick(agentId: string) {
@@ -154,24 +204,34 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
                     {a.username_label && (
                       <p className="font-mono text-xs text-muted">@{a.username_label}</p>
                     )}
+                    <p className="text-xs text-faint">awaiting approval</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                {isActive ? (
                   <button
-                    onClick={() => decide(a.id, "approve")}
-                    disabled={busy !== null}
-                    className="btn rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-white hover:bg-accent-dark disabled:opacity-50"
+                    onClick={() => requeue(a)}
+                    className="btn rounded-full border border-line px-4 py-1.5 text-sm font-medium hover:border-ink"
                   >
-                    {busy === a.id + "approve" ? "…" : "Accept"}
+                    Review
                   </button>
-                  <button
-                    onClick={() => decide(a.id, "decline")}
-                    disabled={busy !== null}
-                    className="btn rounded-full border border-line px-4 py-1.5 text-sm font-medium hover:border-ink disabled:opacity-50"
-                  >
-                    Decline
-                  </button>
-                </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => decide(a.id, "approve")}
+                      disabled={busy !== null}
+                      className="btn rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-white hover:bg-accent-dark disabled:opacity-50"
+                    >
+                      {busy === a.id + "approve" ? "…" : "Accept"}
+                    </button>
+                    <button
+                      onClick={() => decide(a.id, "decline")}
+                      disabled={busy !== null}
+                      className="btn rounded-full border border-line px-4 py-1.5 text-sm font-medium hover:border-ink disabled:opacity-50"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -248,6 +308,17 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
           )}
         </ul>
       </section>
+
+      {/* Join-request approval modal — front of the queue only */}
+      {isActive && queue.length > 0 && (
+        <JoinRequestModal
+          agent={queue[0]}
+          workspaceName={workspaceName}
+          busy={modalBusy}
+          onAccept={() => decideModal(queue[0].id, "approve")}
+          onDeny={() => decideModal(queue[0].id, "decline")}
+        />
+      )}
 
       {/* Kick confirmation */}
       {kickTarget && (
