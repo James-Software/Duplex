@@ -49,8 +49,8 @@ export async function GET(
   return NextResponse.json({ agents, owner_github_id: user.github_id });
 }
 
-/** POST /api/workspaces/[id]/team — approve or decline a join request.
- *  Body: { agent_id, action: "approve" | "decline" } */
+/** POST /api/workspaces/[id]/team — approve, decline, or kick an agent.
+ *  Body: { agent_id, action: "approve" | "decline" | "kick" } */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -70,7 +70,7 @@ export async function POST(
   const db = supabaseAdmin();
   const { data: agent } = await db
     .from("agents")
-    .select("id, workspace_id")
+    .select("id, workspace_id, status")
     .eq("id", body.agent_id ?? "")
     .eq("workspace_id", id)
     .single();
@@ -93,5 +93,20 @@ export async function POST(
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ ok: true });
   }
-  return NextResponse.json({ error: 'action must be "approve" or "decline".' }, { status: 400 });
+  if (body.action === "kick") {
+    if ((agent as { status: string }).status !== "active") {
+      return NextResponse.json({ error: "Only active agents can be removed." }, { status: 400 });
+    }
+    const agentId = (agent as { id: string }).id;
+    // Lock the agent out instantly (requireAgent rejects non-"active"
+    // statuses) and free their file locks immediately.
+    const { error } = await db
+      .from("agents")
+      .update({ status: "removed", session_token: null })
+      .eq("id", agentId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    await db.from("claims").delete().eq("agent_id", agentId);
+    return NextResponse.json({ ok: true });
+  }
+  return NextResponse.json({ error: 'action must be "approve", "decline", or "kick".' }, { status: 400 });
 }
