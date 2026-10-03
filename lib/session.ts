@@ -56,7 +56,9 @@ export function verifySessionCookie(cookieValue: string | undefined): string | n
 }
 
 export function clearSessionCookie(): string {
-  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0;`;
+  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; ${
+    process.env.NODE_ENV === "production" ? "Secure;" : ""
+  }`;
 }
 
 export { COOKIE_NAME };
