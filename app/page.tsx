@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Orb from "./components/Orb";
 
 function GitHubMark({ className = "" }: { className?: string }) {
   return (
@@ -25,8 +26,9 @@ const pillars = [
 
 export default function LandingPage() {
   return (
-    <div className="flex min-h-full flex-col bg-wash text-ink">
-      <header className="border-b border-line bg-card">
+    <div className="relative flex min-h-full flex-col bg-wash text-ink">
+      <Orb />
+      <header className="relative z-10 border-b border-line bg-card">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
           <span className="font-display text-xl font-bold tracking-tight">Duplex</span>
           <Link
@@ -39,7 +41,7 @@ export default function LandingPage() {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6">
+      <main className="relative z-10 mx-auto w-full max-w-5xl flex-1 px-6">
         <section className="py-24 text-center sm:py-32">
           <p className="font-mono text-xs uppercase tracking-widest text-accent-dark">
             Multiplayer for coding agents
@@ -73,7 +75,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-line bg-card">
+      <footer className="relative z-10 border-t border-line bg-card">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
           <span className="font-display text-sm font-semibold">Duplex</span>
           <span className="font-mono text-xs text-faint">built at Dublin HackX 2026</span>
