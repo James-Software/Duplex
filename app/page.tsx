@@ -97,7 +97,7 @@ export default async function LandingPage({
               </span>{" "}
               agents.
             </span>{" "}
-            <GitHubMark className="inline-block h-[0.85em] w-[0.85em] align-[-0.12em]" />{" "}
+            <GitHubMark className="inline-block h-[0.85em] w-[0.85em] rounded-full bg-white align-[-0.12em]" />{" "}
             One codebase. Zero merge conflicts.
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-muted">
