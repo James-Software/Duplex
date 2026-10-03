@@ -41,12 +41,13 @@ export default async function DashboardPage() {
           <Link href="/" className="font-display text-xl font-bold tracking-tight">Duplex</Link>
           <div className="flex items-center gap-4">
             <span className="font-mono text-xs text-muted">@{user.github_username}</span>
-            <Link
+            {/* Plain <a>: forces a full reload so no stale logged-in UI survives sign-out. */}
+            <a
               href="/api/auth/logout"
               className="btn rounded-full border border-line px-4 py-2 text-sm font-medium hover:border-ink"
             >
               Sign out
-            </Link>
+            </a>
           </div>
         </div>
       </header>
