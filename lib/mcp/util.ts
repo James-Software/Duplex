@@ -48,6 +48,18 @@ export function newSessionToken(): string {
   return `dx_${randomBytes(24).toString("hex")}`;
 }
 
+/**
+ * Activity window for the "editing" indicator — matches the default claim TTL.
+ * An agent only counts as actively editing while seen within this window.
+ */
+export const AGENT_ACTIVE_WINDOW_MS = 5 * 60 * 1000;
+
+/** True when the agent was last seen within the activity window. */
+export function isRecentlyActive(lastSeen: string | null | undefined): boolean {
+  if (!lastSeen) return false;
+  return Date.now() - new Date(lastSeen).getTime() < AGENT_ACTIVE_WINDOW_MS;
+}
+
 /** Non-throwing agent lookup for tool handlers. */
 export async function agentFromToken(
   sessionToken: string
