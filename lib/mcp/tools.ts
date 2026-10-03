@@ -52,6 +52,67 @@ async function touchAgentPath(agentId: string, path: string) {
 }
 
 /**
+ * Fetch messages the agent hasn't seen yet, for inline delivery in
+ * get_team_status (message-in-poll) — agents that only poll still learn
+ * about messages sent while they were idle. Marks them read up to the newest
+ * delivered message (never now(), so a message landing mid-query isn't
+ * skipped). Best-effort: any failure returns "" and never breaks the poll.
+ */
+async function deliverUnreadMessages(
+  db: ReturnType<typeof supabaseAdmin>,
+  agent: DbAgent
+): Promise<string> {
+  try {
+    const lastRead = (agent as { last_read_at?: string | null }).last_read_at ?? null;
+    const since = lastRead ?? new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { data: msgRows, error } = await db
+      .from("messages")
+      .select("sender_agent_id, recipient_agent_id, message, created_at")
+      .eq("workspace_id", agent.workspace_id)
+      .or(`recipient_agent_id.is.null,recipient_agent_id.eq.${agent.id}`)
+      .gt("created_at", since)
+      .order("created_at", { ascending: true })
+      .limit(10);
+    if (error || !msgRows) return "";
+    const unread = (msgRows as {
+      sender_agent_id: string | null;
+      recipient_agent_id: string | null;
+      message: string;
+      created_at: string;
+    }[]).filter((m) => m.sender_agent_id !== agent.id);
+    if (unread.length === 0) return "";
+    const { data: teamRows } = await db
+      .from("agents")
+      .select("id, name")
+      .eq("workspace_id", agent.workspace_id);
+    const names = Object.fromEntries(
+      ((teamRows ?? []) as { id: string; name: string }[]).map((t) => [t.id, t.name])
+    );
+    const lines = unread.map((m) => {
+      const from = m.sender_agent_id ? names[m.sender_agent_id] ?? "?" : "system";
+      const to = m.recipient_agent_id ? ` → ${names[m.recipient_agent_id] ?? "?"}` : " → everyone";
+      return `[${from}${to}]: ${m.message}`;
+    });
+    try {
+      const { error: markError } = await db
+        .from("agents")
+        .update({ last_read_at: unread[unread.length - 1].created_at })
+        .eq("id", agent.id);
+      if (markError) console.error("mark messages read failed:", markError.message);
+    } catch (e) {
+      console.error("mark messages read failed:", e);
+    }
+    return (
+      `\n\nUNREAD MESSAGES (${unread.length}) — delivered here; also readable via get_messages:\n` +
+      lines.join("\n")
+    );
+  } catch (e) {
+    console.error("unread message delivery failed:", e);
+    return "";
+  }
+}
+
+/**
  * Check whether a rival agent holds an unexpired claim (lock) on a path.
  * Returns the holder's name/intent when blocked, null when the caller may proceed.
  */
@@ -236,14 +297,17 @@ export function registerDuplexTools(server: McpServer) {
       const ws = wsRow as { id: string; name: string; github_repo: string; github_base_branch: string };
 
       if (agent.status === "pending") {
+        const unread = await deliverUnreadMessages(db, agent);
         return textResult(
           `APPROVED: false\nWorkspace: "${ws.name}" (${ws.github_repo})\n\n` +
-            `You are still waiting for approval. Ask the workspace creator to accept "${agent.name}" in the dashboard, then poll again in ~10 seconds.`
+            `You are still waiting for approval. Ask the workspace creator to accept "${agent.name}" in the dashboard, then poll again in ~10 seconds.` +
+            unread
         );
       }
       if (agent.status !== "active" || !agent.session_token) {
         return errorResult(`Your agent status is "${agent.status}". You cannot collaborate.`);
       }
+      const unread = await deliverUnreadMessages(db, agent);
       return textResult(
         `APPROVED: true\nYour session_token: ${agent.session_token}\n` +
           `Pass it as "session_token" on every other tool call.\n\n` +
@@ -254,8 +318,10 @@ export function registerDuplexTools(server: McpServer) {
           `edit_file with the base_version you read → send_message to coordinate. ` +
           `If edit_file reports a CONFLICT, read_file again and rebase your change. ` +
           `If a file is LOCKED by a teammate, message them with send_message instead of editing it. ` +
+          `Keep polling get_team_status while you work — unread messages from teammates are delivered there. ` +
           `When your work is FULLY done, you MUST call complete with a short paragraph summarizing what you changed — ` +
-          `never go silent without calling it.`
+          `never go silent without calling it.` +
+          unread
       );
     }
   );
@@ -646,6 +712,15 @@ export function registerDuplexTools(server: McpServer) {
         const to = m.recipient_agent_id ? ` → ${names[m.recipient_agent_id] ?? "?"}` : " → everyone";
         return `[${m.created_at}] ${from}${to}: ${m.message}`;
       });
+      try {
+        const { error: markError } = await db
+          .from("agents")
+          .update({ last_read_at: rows[rows.length - 1].created_at })
+          .eq("id", agent.id);
+        if (markError) console.error("mark messages read failed:", markError.message);
+      } catch (e) {
+        console.error("mark messages read failed:", e);
+      }
       return textResult(lines.join("\n"));
     }
   );

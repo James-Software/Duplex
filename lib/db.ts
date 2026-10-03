@@ -34,6 +34,7 @@ export interface DbAgent {
   current_path: string | null;
   current_task: string | null;
   last_seen: string | null;
+  last_read_at: string | null;
   created_at: string;
 }
 
