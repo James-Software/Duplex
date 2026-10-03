@@ -53,24 +53,36 @@ function MorphCopyButton({ text }: { text: string }) {
   );
 }
 
+const AGENT_NAME_COOKIE = "duplex_agent_name";
+const DEFAULT_AGENT_NAME = "Unnamed Coding Agent";
+
+function readAgentNameCookie(): string {
+  if (typeof document === "undefined") return DEFAULT_AGENT_NAME;
+  const match = document.cookie
+    .split("; ")
+    .find((c) => c.startsWith(AGENT_NAME_COOKIE + "="));
+  if (!match) return DEFAULT_AGENT_NAME;
+  try {
+    const value = decodeURIComponent(match.slice(AGENT_NAME_COOKIE.length + 1));
+    return value.trim() ? value : DEFAULT_AGENT_NAME;
+  } catch {
+    return DEFAULT_AGENT_NAME;
+  }
+}
+
+function writeAgentNameCookie(value: string) {
+  document.cookie = `${AGENT_NAME_COOKIE}=${encodeURIComponent(
+    value
+  )}; max-age=31536000; path=/; SameSite=Lax`;
+}
+
 function buildPrompt(
-  client: "claude" | "codex",
   appUrl: string,
   joinCode: string,
   username: string,
-  workspaceName: string
+  workspaceName: string,
+  agentName: string
 ): string {
-  const config =
-    client === "claude"
-      ? `Claude Code — add to .mcp.json (or run: claude mcp add --transport http duplex ${appUrl}/api/mcp):
-{
-  "mcpServers": {
-    "duplex": { "url": "${appUrl}/api/mcp" }
-  }
-}`
-      : `Codex — add to ~/.codex/config.toml:
-[mcp_servers.duplex]
-url = "${appUrl}/api/mcp"`;
   return [
     `DUPLEX — join the "${workspaceName}" collaboration workspace:`,
     ``,
@@ -80,11 +92,14 @@ url = "${appUrl}/api/mcp"`;
     `joins; when the work is done, the workspace exports to GitHub as one pull request.`,
     ``,
     `1. Connect to the MCP server:`,
-    `   ${config}`,
+    `   ${appUrl}/api/mcp`,
+    `   (Claude Code: \`claude mcp add --transport http duplex ${appUrl}/api/mcp\` or add to .mcp.json;`,
+    `    Codex: add \`[mcp_servers.duplex]\` with \`url = "${appUrl}/api/mcp"\` to ~/.codex/config.toml)`,
     ``,
     `2. Call the join_workspace tool with:`,
     `   code: "${joinCode}"`,
-    `   client_type: "${client === "claude" ? "claude-code" : "codex"}"`,
+    `   agent_name: "${agentName}"`,
+    `   client_type: "claude-code" | "codex" | "other" (whichever you are)`,
     `   username_label: "${username}"`,
     ``,
     `3. You start as PENDING. Poll get_team_status with your agent_id every`,
@@ -104,8 +119,14 @@ export default function ConnectPrompt({
   username: string;
   workspaceName: string;
 }) {
-  const [tab, setTab] = useState<"claude" | "codex">("claude");
-  const prompt = buildPrompt(tab, appUrl, joinCode, username, workspaceName);
+  const [agentName, setAgentName] = useState(readAgentNameCookie);
+  const effectiveName = agentName.trim() ? agentName.trim() : DEFAULT_AGENT_NAME;
+  const prompt = buildPrompt(appUrl, joinCode, username, workspaceName, effectiveName);
+
+  function onNameChange(value: string) {
+    setAgentName(value);
+    writeAgentNameCookie(value);
+  }
 
   return (
     <div className="rounded-2xl border border-line bg-card p-6">
@@ -116,19 +137,17 @@ export default function ConnectPrompt({
       <p className="mt-1 text-sm text-muted">
         Paste this prompt into the agent. It connects, joins, and waits for your approval.
       </p>
-      <div className="mt-4 flex gap-1 rounded-full bg-wash p-1 w-fit">
-        {(["claude", "codex"] as const).map((c) => (
-          <button
-            key={c}
-            onClick={() => setTab(c)}
-            className={`btn rounded-full px-4 py-1.5 text-sm font-medium ${
-              tab === c ? "bg-card text-ink shadow-sm border border-line" : "text-muted hover:text-ink"
-            }`}
-          >
-            {c === "claude" ? "Claude Code" : "Codex"}
-          </button>
-        ))}
-      </div>
+      <label className="mt-4 block">
+        <span className="text-sm font-medium text-ink">Agent name</span>
+        <input
+          value={agentName}
+          onChange={(e) => onNameChange(e.target.value)}
+          placeholder={DEFAULT_AGENT_NAME}
+          spellCheck={false}
+          maxLength={80}
+          className="mt-1.5 w-full rounded-xl border border-line bg-card px-4 py-2.5 text-sm text-ink placeholder:text-faint outline-none focus:border-accent"
+        />
+      </label>
       <pre className="mt-3 max-h-72 overflow-auto rounded-xl bg-ink p-4 font-mono text-xs leading-relaxed text-neutral-200 whitespace-pre-wrap">
         {prompt}
       </pre>
