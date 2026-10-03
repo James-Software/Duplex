@@ -19,6 +19,11 @@ const FOLLOW_LERP = 0.025; // slow, dreamy trailing
 const SUCK_IN_LERP = 0.12; // quick grab when hovering a control
 const SUCK_OUT_LERP = 0.028; // long gentle release (~0.6s ease-out), no snap
 const VANISH_RADIUS = 70; // fade out within this distance of the cursor
+// Entrance: the orb holds invisible until the headline flip lands (0.2s CSS
+// delay + 8 x 160ms segments ~= 1.48s), then fades in while popping out of
+// the cursor like it was just released from a held button.
+const INTRO_DELAY_MS = 1550;
+const INTRO_MS = 700;
 
 type Particle = {
   x: number;
@@ -55,6 +60,15 @@ function hash01(i: number, salt: number): number {
   return (h % 1000) / 1000;
 }
 
+const clamp01 = (x: number): number => Math.min(1, Math.max(0, x));
+const easeOutCubic = (x: number): number => 1 - Math.pow(1 - x, 3);
+// easeOutBack with a deliberately small overshoot (~1.04 max) — a pop, not a boing.
+const easeOutBackSoft = (x: number): number => {
+  const c1 = 1.0;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+};
+
 /**
  * Fixed full-viewport backdrop: an Antigravity-style breathing point-cloud sphere.
  * ~350 identical solid-green dashes on a slowly rotating 3D sphere, projected to 2D
@@ -65,6 +79,8 @@ function hash01(i: number, salt: number): number {
  * every dash into the mouse, where they stream in and vanish. Subtle 3D depth
  * cueing: dashes nearer the viewer render slightly larger and more opaque,
  * farther ones smaller and fainter — the sphere reads as a volume.
+ * Entrance: after the headline flip lands, the orb fades in over 700ms while
+ * popping out of the cursor (subtle overshoot), like a just-released hold.
  * Compact by design: the whole orb (radius, dashes, strokes) is scaled to
  * ~72% via ORB_SCALE so it sits lighter on the page while keeping the exact
  * same visual proportions.
@@ -175,6 +191,17 @@ export default function Orb() {
       suck += (suckTarget - suck) * suckLerp;
       if (!hoveringControl && suck < 0.002) suck = 0;
 
+      // Entrance progress: 0 until INTRO_DELAY_MS, then 0 -> 1 over INTRO_MS.
+      // Reduced motion bypasses the intro — full orb immediately.
+      // Before the delay we return early (render nothing) but keep easing the
+      // center toward the cursor, so the pop starts exactly at the mouse.
+      const introP = reducedMotion
+        ? 1
+        : clamp01((t - INTRO_DELAY_MS) / INTRO_MS);
+      if (introP <= 0) return;
+      const introAlpha = easeOutCubic(introP);
+      const introScale = easeOutBackSoft(introP);
+
       // Compact and refined: diameter ~50% of the smaller viewport dimension.
       // The dispersal spread scales with the radius automatically (positions
       // are unit-sphere space multiplied by R below), so the cloud stays
@@ -196,7 +223,9 @@ export default function Orb() {
         1 +
         0.03 * Math.sin((t / 5000) * Math.PI * 2) +
         0.015 * Math.sin((t / 7300) * Math.PI * 2 + 1.7);
-      const R = baseR * breathe;
+      // The entrance pop scales the radius (and dash lengths below) at the
+      // eased cursor position — the orb bursts out of the mouse.
+      const R = baseR * breathe * introScale;
 
       // Very slow rotation underneath.
       const rotY = (t / 26000) * Math.PI * 2;
@@ -281,14 +310,16 @@ export default function Orb() {
           dy = dirs[pi * 2 + 1];
         }
 
-        ctx.globalAlpha = alpha;
+        ctx.globalAlpha = alpha * introAlpha;
         // Stroke width falls off smoothly with cursor distance (scaled by
         // ORB_SCALE along with everything else): wider near the mouse,
         // thinner far away. Length is scaled by depth so the sphere reads
-        // as a volume; width stays the cursor cue.
+        // as a volume; width stays the cursor cue. During the entrance the
+        // dash lengths ride the pop scale so the orb grows from the cursor
+        // as one coherent burst.
         const wt = Math.min(1, d / diag);
         ctx.lineWidth = DASH_W_FAR + (DASH_W_NEAR - DASH_W_FAR) * (1 - wt) * (1 - wt);
-        const half = DASH_HALF * depthScale;
+        const half = DASH_HALF * depthScale * introScale;
         ctx.beginPath();
         ctx.moveTo(px - dx * half, py - dy * half);
         ctx.lineTo(px + dx * half, py + dy * half);
