@@ -54,7 +54,7 @@ export default async function ExportedPage({
             </a>
           ) : (
             <p className="text-sm text-muted">
-              Branch pushed — open the PR manually on GitHub.
+              Branch pushed. Open the PR manually on GitHub.
             </p>
           )}
         </div>

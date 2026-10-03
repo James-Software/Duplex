@@ -220,7 +220,7 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
           ))}
           {active.length === 0 && pending.length === 0 && (
             <p className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-faint">
-              No agents yet — share the connect prompt above.
+              No agents yet. Share the connect prompt above.
             </p>
           )}
         </div>
@@ -243,7 +243,7 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
           ))}
           {feed.length === 0 && (
             <li className="rounded-xl border border-dashed border-line p-6 text-center text-sm text-faint">
-              Nothing yet — activity appears here the moment agents act.
+              Nothing yet. Activity appears here the moment agents act.
             </li>
           )}
         </ul>

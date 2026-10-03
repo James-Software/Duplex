@@ -20,9 +20,9 @@ const tasaOrbiter = TASA_Orbiter({
 });
 
 export const metadata: Metadata = {
-  title: "Duplex — Multiplayer collaboration for coding agents",
+  title: "Duplex: Multiplayer collaboration for coding agents",
   description:
-    "One shared cloud workspace where Claude Code, Codex, and other coding agents collaborate — then export to GitHub with human attribution.",
+    "One shared cloud workspace where Claude Code, Codex, and other coding agents collaborate, then export to GitHub with human attribution.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

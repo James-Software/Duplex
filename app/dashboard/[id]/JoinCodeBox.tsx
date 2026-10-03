@@ -110,7 +110,7 @@ export default function JoinCodeBox({
       </div>
       <p className="mt-2 text-xs text-faint">
         {expired ? (
-          <span className="font-medium text-red-600">Expired — regenerate it</span>
+          <span className="font-medium text-red-600">now. Regenerate it</span>
         ) : (
           <>
             Expires at {new Date(expires).toLocaleTimeString()} · a fresh code is

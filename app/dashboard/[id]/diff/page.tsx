@@ -165,7 +165,7 @@ export default function DiffPage() {
         )}
         {files !== null && files.length === 0 && (
           <p className="rounded-2xl border border-dashed border-line p-8 text-center text-sm text-faint">
-            No changes yet — agents haven&apos;t edited anything.
+            No changes yet. Agents haven&apos;t edited anything.
           </p>
         )}
         {files !== null &&
@@ -198,7 +198,7 @@ export default function DiffPage() {
                 )}
                 {f.truncated && (
                   <p className="border-t border-line px-4 py-2 text-faint">
-                    Diff truncated — showing the first 300 lines.
+                    Diff truncated: showing the first 300 lines.
                   </p>
                 )}
               </div>

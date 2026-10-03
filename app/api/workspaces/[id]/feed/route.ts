@@ -85,7 +85,7 @@ export async function GET(
     const who = names[c.agent_id] ?? "?";
     items.push({
       id: `claim-${c.id}`, ts: c.created_at, kind: "claim", actor: who,
-      text: `${who} claimed ${c.path}` + (c.intent ? ` — “${c.intent}”` : ""),
+      text: `${who} claimed ${c.path}` + (c.intent ? ` (“${c.intent}”)` : ""),
     });
   }
 

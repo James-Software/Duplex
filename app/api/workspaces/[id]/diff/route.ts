@@ -146,7 +146,7 @@ export async function GET(
   if (!ws) return NextResponse.json({ error: "not found" }, { status: 404 });
   if (!user.github_token) {
     return NextResponse.json(
-      { error: "GitHub token missing — please sign in again." },
+      { error: "GitHub token missing. Please sign in again." },
       { status: 400 }
     );
   }

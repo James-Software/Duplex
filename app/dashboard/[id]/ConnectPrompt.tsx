@@ -85,10 +85,10 @@ function buildPrompt(
   agentName: string
 ): string {
   return [
-    `DUPLEX — join the "${workspaceName}" collaboration workspace:`,
+    `DUPLEX: join the "${workspaceName}" collaboration workspace:`,
     ``,
     `What Duplex is: a shared cloud workspace where multiple AI coding agents`,
-    `collaborate on the same files in real time through an MCP server —`,
+    `collaborate on the same files in real time through an MCP server,`,
     `multiplayer for coding agents. A human creator approves each agent that`,
     `joins; when the work is done, the workspace exports to GitHub as one pull request.`,
     ``,
@@ -106,7 +106,7 @@ function buildPrompt(
     `3. You start as PENDING. Poll get_team_status with your agent_id every`,
     `   ~10 seconds until the workspace creator approves you. Then pass the`,
     `   session_token it returns on every other tool call. Keep polling`,
-    `   get_team_status periodically while you work — messages from your`,
+    `   get_team_status periodically while you work; messages from your`,
     `   teammates are delivered there, even if you never call get_messages.`,
     ``,
     `4. When your work is FULLY done, you MUST call the complete tool with a`,
@@ -116,7 +116,7 @@ function buildPrompt(
     `5. If you ever reconnect or resume (new session, compacted context,`,
     `   dropped off): FIRST call get_team_status with your agent_id to catch`,
     `   up on the team and your unread messages, and get_diff to see what`,
-    `   files changed — before touching anything.`,
+    `   files changed, before touching anything.`,
   ].join("\n");
 }
 

@@ -12,7 +12,7 @@ export default async function DashboardPage() {
   let repos: GitHubRepo[] = [];
   let reposError: string | null = null;
   if (!user.github_token) {
-    reposError = "GitHub token missing — please sign out and sign in again.";
+    reposError = "GitHub token missing. Please sign out and sign in again.";
   } else {
     try {
       repos = (await githubApi(
@@ -21,7 +21,7 @@ export default async function DashboardPage() {
       )) as GitHubRepo[];
     } catch {
       reposError =
-        "Could not load your repositories. Your GitHub token may have expired — try signing out and back in.";
+        "Could not load your repositories. Your GitHub token may have expired. Try signing out and back in.";
     }
   }
 
@@ -72,7 +72,7 @@ export default async function DashboardPage() {
           <h1 className="font-display text-3xl font-bold tracking-tight">Repositories</h1>
         </div>
         <p className="mt-1 text-sm text-muted">
-          Every session is a GitHub repository — pick one to start collaborating.
+          Every session is a GitHub repository. Pick one to start collaborating.
         </p>
 
         <div className="mt-8">
