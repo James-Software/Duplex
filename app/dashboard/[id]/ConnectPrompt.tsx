@@ -179,11 +179,31 @@ export default function ConnectPrompt({
     writeAgentNameCookie(value);
   }
 
-  function randomizeName() {
+  async function randomizeName() {
     setSpins((s) => s + 1);
-    const options = RANDOM_AGENT_NAMES.filter((n) => n !== agentName.trim());
-    const pick = options[Math.floor(Math.random() * options.length)];
-    onNameChange(pick);
+    // Check the whole live team so the roll never duplicates an existing name.
+    const taken = new Set<string>();
+    try {
+      const res = await fetch(`/api/workspaces/${workspaceId}/team`, {
+        credentials: "same-origin",
+      });
+      if (res.ok) {
+        const json = await res.json();
+        for (const a of (json.agents ?? []) as { name?: string }[]) {
+          const n = (a.name ?? "").trim().toLowerCase();
+          if (n) taken.add(n);
+        }
+      }
+    } catch {
+      /* team fetch failed — fall back to just avoiding the current value */
+    }
+    const current = agentName.trim().toLowerCase();
+    if (current) taken.add(current);
+    const options = RANDOM_AGENT_NAMES.filter(
+      (n) => !taken.has(n.toLowerCase())
+    );
+    const pool = options.length > 0 ? options : RANDOM_AGENT_NAMES;
+    onNameChange(pool[Math.floor(Math.random() * pool.length)]);
   }
 
   return (
