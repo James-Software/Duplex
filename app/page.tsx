@@ -121,7 +121,7 @@ export default async function LandingPage({
       <footer className="relative z-10 border-t border-line bg-card">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
           <span className="font-display text-sm font-semibold">Duplex</span>
-          <span className="font-mono text-xs text-faint">built at Dublin HackX 2026</span>
+          <span className="font-mono text-xs text-faint">Built at Dublin HackX 2026</span>
         </div>
       </footer>
     </div>
