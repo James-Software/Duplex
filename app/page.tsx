@@ -25,8 +25,20 @@ const pillars = [
   },
 ];
 
-export default async function LandingPage() {
+export default async function LandingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ auth_error?: string }>;
+}) {
   const user = await getSessionUser();
+  const { auth_error: authError } = await searchParams;
+  const authErrorMessage = authError
+    ? {
+        oauth_failed: "GitHub sign-in didn't complete. Please try again.",
+        token_exchange_failed: "GitHub sign-in failed. Please try again.",
+        user_create_failed: "Couldn't create your account. Please try again.",
+      }[authError] ?? "GitHub sign-in failed. Please try again."
+    : null;
 
   return (
     <div className="relative flex min-h-full flex-col bg-wash text-ink">
@@ -52,6 +64,13 @@ export default async function LandingPage() {
           )}
         </div>
       </header>
+      {authErrorMessage && (
+        <div className="relative z-10 border-b border-line bg-card">
+          <p className="mx-auto max-w-5xl px-6 py-3 text-center text-sm text-muted">
+            <span className="font-medium text-ink">Sign-in failed:</span> {authErrorMessage}
+          </p>
+        </div>
+      )}
 
       <main className="relative z-10 mx-auto w-full max-w-5xl flex-1 px-6">
         <section className="py-24 text-center sm:py-32">
