@@ -58,6 +58,11 @@ body {
   .btn:active {
     transform: none;
   }
+  /* Odometer: no animation, rests on 10. */
+  .reel {
+    animation: none;
+    transform: translateY(-8em);
+  }
 }
 
 /* Modal entrance: quick fade + settle (150ms). Paired with motion-safe: so
@@ -72,3 +77,53 @@ body {
     transform: scale(1) translateY(0);
   }
 }
+/* Landing headline odometer: flips 2 -> 10 on page load (~1.3s). One focal
+   moment for the landing page; everything else stays still. */
+.reel-mask {
+  display: inline-block;
+  height: 1em;
+  overflow: hidden;
+  vertical-align: -0.14em;
+  min-width: 2ch;
+  font-variant-numeric: tabular-nums;
+}
+.reel {
+  display: block;
+  animation: flip-roll 1.28s cubic-bezier(0.16, 1, 0.3, 1) 0.2s forwards;
+}
+.reel > span {
+  display: block;
+  height: 1em;
+  line-height: 1;
+  text-align: center;
+}
+@keyframes flip-roll {
+  0% {
+    transform: translateY(0);
+  }
+  12.5% {
+    transform: translateY(-1em);
+  }
+  25% {
+    transform: translateY(-2em);
+  }
+  37.5% {
+    transform: translateY(-3em);
+  }
+  50% {
+    transform: translateY(-4em);
+  }
+  62.5% {
+    transform: translateY(-5em);
+  }
+  75% {
+    transform: translateY(-6em);
+  }
+  87.5% {
+    transform: translateY(-7em);
+  }
+  100% {
+    transform: translateY(-8em);
+  }
+}
+
