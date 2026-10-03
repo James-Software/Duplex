@@ -166,10 +166,13 @@ export default function ConnectPrompt({
       />
       <label className="mt-5 block">
         <span className="text-sm font-medium text-ink">Agent name</span>
+        <p className="mt-1 text-sm text-muted">
+          The agent connects with this name, e.g. Codex or Claude Code.
+        </p>
         <input
           value={agentName}
           onChange={(e) => onNameChange(e.target.value)}
-          placeholder={DEFAULT_AGENT_NAME}
+          placeholder="e.g. Codex"
           spellCheck={false}
           maxLength={80}
           className="mt-1.5 w-full rounded-xl border border-line bg-card px-4 py-2.5 text-sm text-ink placeholder:text-faint outline-none focus:border-accent"
