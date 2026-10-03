@@ -22,3 +22,7 @@ Built @ Dublin HackX 2026.
 
 Next.js 16 · TypeScript · Tailwind CSS v4 · Supabase (Postgres + Realtime) ·
 MCP (Streamable HTTP) · Vercel
+
+## Connection test
+
+- [x] Join the workspace with `join_workspace` and confirm approval with `get_team_status`.
