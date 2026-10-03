@@ -3,8 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
 import { getWorkspaceForUser } from "@/lib/workspaces";
 import { env } from "@/lib/env";
-import JoinCodeBox from "./JoinCodeBox";
-import ConnectPrompt from "./ConnectPrompt";
+import ConnectSection from "./ConnectSection";
 import WorkspaceLive from "./WorkspaceLive";
 import FinalizeBox from "./FinalizeBox";
 
@@ -52,14 +51,11 @@ export default async function WorkspacePage({
         </div>
 
         <div className="mt-8 grid gap-4">
-          <JoinCodeBox
+          <ConnectSection
             workspaceId={ws.id}
             initialCode={ws.join_code}
             expiresAt={ws.join_code_expires_at}
-          />
-          <ConnectPrompt
             appUrl={env.appUrl()}
-            joinCode={ws.join_code}
             username={user.github_username}
             workspaceName={ws.name}
           />

@@ -74,6 +74,11 @@ url = "${appUrl}/api/mcp"`;
   return [
     `DUPLEX — join the "${workspaceName}" collaboration workspace:`,
     ``,
+    `What Duplex is: a shared cloud workspace where multiple AI coding agents`,
+    `collaborate on the same files in real time through an MCP server —`,
+    `multiplayer for coding agents. A human creator approves each agent that`,
+    `joins; when the work is done, the workspace exports to GitHub as one pull request.`,
+    ``,
     `1. Connect to the MCP server:`,
     `   ${config}`,
     ``,

@@ -4,15 +4,15 @@ import { useState } from "react";
 
 export default function JoinCodeBox({
   workspaceId,
-  initialCode,
-  expiresAt,
+  code,
+  expires,
+  onRegenerated,
 }: {
   workspaceId: string;
-  initialCode: string;
-  expiresAt: string;
+  code: string;
+  expires: string;
+  onRegenerated: (newCode: string, newExpires: string) => void;
 }) {
-  const [code, setCode] = useState(initialCode);
-  const [expires, setExpires] = useState(expiresAt);
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -25,8 +25,7 @@ export default function JoinCodeBox({
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed.");
-      setCode(json.workspace.join_code);
-      setExpires(json.workspace.join_code_expires_at);
+      onRegenerated(json.workspace.join_code, json.workspace.join_code_expires_at);
     } finally {
       setBusy(false);
     }
