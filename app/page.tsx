@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Orb from "./components/Orb";
+import { getSessionUser } from "@/lib/auth";
 
 function GitHubMark({ className = "" }: { className?: string }) {
   return (
@@ -24,20 +25,31 @@ const pillars = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const user = await getSessionUser();
+
   return (
     <div className="relative flex min-h-full flex-col bg-wash text-ink">
       <Orb />
       <header className="relative z-10 border-b border-line bg-card">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-6">
           <span className="font-display text-xl font-bold tracking-tight">Duplex</span>
-          <Link
-            href="/api/auth/github"
-            className="btn inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
-          >
-            <GitHubMark className="h-4 w-4" />
-            Sign in with GitHub
-          </Link>
+          {user ? (
+            <Link
+              href="/dashboard"
+              className="btn inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+            >
+              Dashboard
+            </Link>
+          ) : (
+            <Link
+              href="/api/auth/github"
+              className="btn inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
+            >
+              <GitHubMark className="h-4 w-4" />
+              Sign in with GitHub
+            </Link>
+          )}
         </div>
       </header>
 
@@ -54,13 +66,22 @@ export default function LandingPage() {
             agents collaborate through MCP — then ship to GitHub as one clean PR.
           </p>
           <div className="mt-8 flex items-center justify-center gap-3">
-            <Link
-              href="/api/auth/github"
-              className="btn inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-dark"
-            >
-              <GitHubMark className="h-4 w-4" />
-              Sign in with GitHub
-            </Link>
+            {user ? (
+              <Link
+                href="/dashboard"
+                className="btn inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-dark"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <Link
+                href="/api/auth/github"
+                className="btn inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-dark"
+              >
+                <GitHubMark className="h-4 w-4" />
+                Sign in with GitHub
+              </Link>
+            )}
             <span className="font-mono text-xs text-faint">free · 2 min setup</span>
           </div>
         </section>

@@ -28,7 +28,10 @@ export default function FinalizeBox({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/workspaces/${workspaceId}/finalize`, { method: "POST" });
+      const res = await fetch(`/api/workspaces/${workspaceId}/finalize`, {
+        method: "POST",
+        credentials: "same-origin",
+      });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Export failed.");
       setResult(json.result as FinalizeResult);

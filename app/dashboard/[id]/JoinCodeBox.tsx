@@ -21,6 +21,7 @@ export default function JoinCodeBox({
     try {
       const res = await fetch(`/api/workspaces/${workspaceId}/join-code`, {
         method: "POST",
+        credentials: "same-origin",
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? "Failed.");

@@ -41,6 +41,7 @@ export default function RepoList({ repos, sessions }: RepoListProps) {
     try {
       const res = await fetch("/api/workspaces", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ github_repo: fullName }),
       });
