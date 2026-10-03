@@ -26,10 +26,13 @@ function CodexMark({ className = "" }: { className?: string }) {
   );
 }
 
-function OpenCodeMark({ className = "" }: { className?: string }) {
+function CursorMark({ className = "" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} role="img" aria-label="OpenCode">
-      <path d="M22 24H2V0h20zM17 4.8H7v14.4h10z" />
+    <svg viewBox="0 0 466.73 532.09" className={className} role="img" aria-label="Cursor">
+      <path
+        fill="#26251e"
+        d="M457.43,125.94L244.42,2.96c-6.84-3.95-15.28-3.95-22.12,0L9.3,125.94c-5.75,3.32-9.3,9.46-9.3,16.11v247.99c0,6.65,3.55,12.79,9.3,16.11l213.01,122.98c6.84,3.95,15.28,3.95,22.12,0l213.01-122.98c5.75-3.32,9.3-9.46,9.3-16.11v-247.99c0-6.65-3.55-12.79-9.3-16.11h-.01ZM444.05,151.99l-205.63,356.16c-1.39,2.4-5.06,1.42-5.06-1.36v-233.21c0-4.66-2.49-8.97-6.53-11.31L24.87,145.67c-2.4-1.39-1.42-5.06,1.36-5.06h411.26c5.84,0,9.49,6.33,6.57,11.39h-.01Z"
+      />
     </svg>
   );
 }
@@ -101,7 +104,7 @@ export default async function LandingPage({
 
       <main className="relative z-10 mx-auto w-full max-w-5xl flex-1 px-6">
         <section className="py-24 text-center sm:py-32">
-          <div className="mb-6 flex items-center justify-center gap-3" aria-label="Works with Claude, Codex, and OpenCode">
+          <div className="mb-6 flex items-center justify-center gap-3" aria-label="Works with Claude, Codex, and Cursor">
             <span
               title="Claude"
               className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-card transition-transform duration-150 hover:scale-105"
@@ -115,10 +118,10 @@ export default async function LandingPage({
               <CodexMark className="h-6 w-6" />
             </span>
             <span
-              title="OpenCode"
+              title="Cursor"
               className="flex h-12 w-12 items-center justify-center rounded-full border border-line bg-card transition-transform duration-150 hover:scale-105"
             >
-              <OpenCodeMark className="h-6 w-6" />
+              <CursorMark className="h-6 w-6" />
             </span>
           </div>
           <p className="font-mono text-xs uppercase tracking-widest text-accent-dark">
