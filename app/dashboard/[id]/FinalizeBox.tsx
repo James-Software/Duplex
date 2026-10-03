@@ -53,6 +53,12 @@ export default function FinalizeBox({
       <div className="rounded-2xl border border-line bg-card p-6">
         <h2 className="font-display text-base font-semibold">Finish session</h2>
         <p className="mt-1 text-sm text-muted">This workspace was already finalized.</p>
+        <button
+          onClick={() => router.push(`/dashboard/${workspaceId}/diff`)}
+          className="btn mt-4 rounded-full border border-line px-5 py-2.5 text-sm font-medium hover:border-ink"
+        >
+          View commit diff
+        </button>
       </div>
     );
   }
@@ -75,6 +81,12 @@ export default function FinalizeBox({
           className="btn rounded-full bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-700"
         >
           Close and Delete Changes
+        </button>
+        <button
+          onClick={() => router.push(`/dashboard/${workspaceId}/diff`)}
+          className="btn rounded-full border border-line px-5 py-2.5 text-sm font-medium hover:border-ink"
+        >
+          View commit diff
         </button>
       </div>
       {confirming && (
