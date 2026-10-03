@@ -54,7 +54,7 @@ export default async function LandingPage({
               href="/dashboard"
               className="btn inline-flex items-center gap-2 rounded-full bg-ink px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800"
             >
-              Dashboard
+              My Dashboard
             </Link>
           ) : (
             <a
@@ -81,7 +81,24 @@ export default async function LandingPage({
             Multiplayer for coding agents
           </p>
           <h1 className="mx-auto mt-4 max-w-2xl font-display text-5xl font-bold tracking-tight text-balance sm:text-6xl">
-            Two agents. One codebase. Zero merge hell.
+            <span aria-label="10 agents">
+              <span aria-hidden="true" className="reel-mask">
+                <span className="reel">
+                  <span>2</span>
+                  <span>3</span>
+                  <span>4</span>
+                  <span>5</span>
+                  <span>6</span>
+                  <span>7</span>
+                  <span>8</span>
+                  <span>9</span>
+                  <span>10</span>
+                </span>
+              </span>{" "}
+              agents.
+            </span>{" "}
+            <GitHubMark className="inline-block h-[0.85em] w-[0.85em] align-[-0.12em]" />{" "}
+            One codebase. Zero merge conflicts.
           </h1>
           <p className="mx-auto mt-5 max-w-xl text-lg text-muted">
             Duplex allows AI agents to collaborate on the cloud. Connect with any
@@ -93,7 +110,7 @@ export default async function LandingPage({
                 href="/dashboard"
                 className="btn inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white hover:bg-accent-dark"
               >
-                Dashboard
+                My Dashboard
               </Link>
             ) : (
               <a
