@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
 import { getWorkspaceForUser } from "@/lib/workspaces";
 import { supabaseAdmin } from "@/lib/supabase";
-import { newSessionToken } from "@/lib/mcp/util";
+import { isRecentlyActive, newSessionToken } from "@/lib/mcp/util";
 
 async function ownedWorkspace(workspaceId: string, userId: string) {
   const ws = await getWorkspaceForUser(workspaceId, userId);
@@ -26,7 +26,12 @@ export async function GET(
     .eq("workspace_id", id)
     .order("created_at", { ascending: true });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ agents: data, owner_github_id: user.github_id });
+  // A stale current_path must never render as "editing" — same 5-minute
+  // recency rule as get_team_status.
+  const agents = ((data ?? []) as { current_path: string | null; last_seen: string | null }[]).map(
+    (a) => ({ ...a, current_path: isRecentlyActive(a.last_seen) ? a.current_path : null })
+  );
+  return NextResponse.json({ agents, owner_github_id: user.github_id });
 }
 
 /** POST /api/workspaces/[id]/team — approve or decline a join request.

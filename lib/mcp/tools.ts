@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { supabaseAdmin } from "../supabase";
 import type { DbAgent, DbFile } from "../db";
-import { agentFromToken, cleanPath, errorResult, textResult } from "./util";
+import { agentFromToken, cleanPath, errorResult, isRecentlyActive, textResult } from "./util";
 import { regenerateJoinCode } from "../workspaces";
 
 const sessionTokenField = z
@@ -162,14 +162,14 @@ export function registerDuplexTools(server: McpServer) {
         .single();
       const { data: teamRows } = await db
         .from("agents")
-        .select("name, client_type, status, current_task, current_path, username_label")
+        .select("name, client_type, status, current_task, current_path, username_label, last_seen")
         .eq("workspace_id", agent.workspace_id)
         .order("created_at", { ascending: true });
       const team = ((teamRows ?? []) as Partial<DbAgent>[])
         .map(
           (t) =>
             `• ${t.name} (${t.client_type}${t.username_label ? `, ${t.username_label}` : ""}) — ${t.status}` +
-            (t.current_path ? ` · editing ${t.current_path}` : "") +
+            (t.current_path && isRecentlyActive(t.last_seen) ? ` · editing ${t.current_path}` : "") +
             (t.current_task ? ` · ${t.current_task}` : "")
         )
         .join("\n");
@@ -217,7 +217,9 @@ export function registerDuplexTools(server: McpServer) {
         .single();
       const file = data as DbFile | null;
       if (!file) return errorResult(`File not found: ${p}. Use list_files to see what exists.`);
-      await touchAgentPath(agent.id, p);
+      // Reads must not set current_path — requireAgent already refreshed
+      // last_seen, so the agent still counts as active without looking like
+      // it's editing the file.
       return textResult(`--- ${p} (version ${file.version}) ---\n${file.content}`);
     }
   );
