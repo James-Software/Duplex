@@ -1,0 +1,681 @@
+import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { supabaseAdmin } from "../supabase";
+import type { DbAgent, DbFile } from "../db";
+import { agentFromToken, cleanPath, errorResult, textResult } from "./util";
+
+const sessionTokenField = z
+  .string()
+  .describe("Your session token (returned by get_team_status after approval).");
+
+const pathField = z.string().describe("Workspace-relative file path, e.g. src/app.ts.");
+
+function normalizeCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+const CLIENT_PREFIX: Record<string, string> = {
+  "claude-code": "Claude",
+  codex: "Codex",
+  other: "Agent",
+};
+
+async function agentName(id: string | null): Promise<string> {
+  if (!id) return "unknown";
+  const { data } = await supabaseAdmin().from("agents").select("name").eq("id", id).single();
+  return (data as { name: string } | null)?.name ?? "unknown";
+}
+
+async function recordEdit(
+  workspaceId: string,
+  agent: DbAgent,
+  path: string,
+  beforeVersion: number,
+  afterVersion: number
+) {
+  await supabaseAdmin().from("edits").insert({
+    workspace_id: workspaceId,
+    agent_id: agent.id,
+    user_id: agent.user_id,
+    path,
+    before_version: beforeVersion,
+    after_version: afterVersion,
+  });
+}
+
+async function touchAgentPath(agentId: string, path: string) {
+  await supabaseAdmin()
+    .from("agents")
+    .update({ current_path: path, last_seen: new Date().toISOString() })
+    .eq("id", agentId);
+}
+
+/** Register every Duplex MCP tool on the given server. */
+export function registerDuplexTools(server: McpServer) {
+  // ---------------- join ----------------
+  server.registerTool(
+    "join_workspace",
+    {
+      description:
+        "Request to join a Duplex collaboration workspace using its join code. You start as PENDING — poll get_team_status until the workspace creator approves you.",
+      inputSchema: {
+        code: z.string().describe("The workspace join code, e.g. M7K4-P9Q2."),
+        client_type: z
+          .enum(["claude-code", "codex", "other"])
+          .describe("Which coding agent you are."),
+        username_label: z
+          .string()
+          .optional()
+          .describe("The human's username (from the invite prompt) so the creator recognizes you."),
+        agent_name: z
+          .string()
+          .optional()
+          .describe("Custom display name. Defaults to e.g. 'Claude #1'."),
+      },
+    },
+    async ({ code, client_type, username_label, agent_name }) => {
+      const db = supabaseAdmin();
+      const needle = normalizeCode(code);
+      const { data: workspaces } = await db.from("workspaces").select("*").eq("status", "active");
+      const ws = (workspaces ?? []).find(
+        (w: { join_code: string }) => normalizeCode(w.join_code) === needle
+      ) as
+        | { id: string; name: string; join_code_expires_at: string }
+        | undefined;
+      if (!ws) {
+        return errorResult(
+          "Join code not recognized. Check the code with the workspace creator."
+        );
+      }
+      if (new Date(ws.join_code_expires_at).getTime() < Date.now()) {
+        return errorResult(
+          "That join code has expired. Ask the workspace creator to regenerate it on the dashboard."
+        );
+      }
+      const { count } = await db
+        .from("agents")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", ws.id)
+        .eq("client_type", client_type);
+      const n = (count ?? 0) + 1;
+      const name =
+        agent_name?.trim() || `${CLIENT_PREFIX[client_type] ?? "Agent"} #${n}`;
+      // Agents inherit the workspace creator's human identity.
+      const { data: wsRow } = await db
+        .from("workspaces")
+        .select("created_by")
+        .eq("id", ws.id)
+        .single();
+      const { data: agent, error } = await db
+        .from("agents")
+        .insert({
+          workspace_id: ws.id,
+          user_id: (wsRow as { created_by: string }).created_by,
+          name,
+          client_type,
+          username_label: username_label?.trim() || null,
+          status: "pending",
+        })
+        .select("id")
+        .single();
+      if (error || !agent) {
+        return errorResult(`Could not register: ${error?.message ?? "unknown error"}`);
+      }
+
+      return textResult(
+        `Join request sent to workspace "${ws.name}" as "${name}" (agent_id: ${(agent as { id: string }).id}).\n` +
+          `STATUS: PENDING — the workspace creator must approve you in the dashboard.\n` +
+          `Poll get_team_status with your agent_id every ~10 seconds until approved.`
+      );
+    }
+  );
+
+  // ---------------- team status (approval poll) ----------------
+  server.registerTool(
+    "get_team_status",
+    {
+      description:
+        "Check whether you have been approved, and see the team. Before approval this is your poll endpoint; after approval it returns your session_token.",
+      inputSchema: {
+        agent_id: z.string().describe("Your agent_id from join_workspace."),
+      },
+    },
+    async ({ agent_id }) => {
+      const db = supabaseAdmin();
+      const { data: agentRow } = await db.from("agents").select("*").eq("id", agent_id).single();
+      const agent = agentRow as DbAgent | null;
+      if (!agent) return errorResult("Unknown agent_id. Call join_workspace first.");
+      const { data: wsRow } = await db
+        .from("workspaces")
+        .select("id, name, github_repo, github_base_branch")
+        .eq("id", agent.workspace_id)
+        .single();
+      const { data: teamRows } = await db
+        .from("agents")
+        .select("name, client_type, status, current_task, current_path, username_label")
+        .eq("workspace_id", agent.workspace_id)
+        .order("created_at", { ascending: true });
+      const team = ((teamRows ?? []) as Partial<DbAgent>[])
+        .map(
+          (t) =>
+            `• ${t.name} (${t.client_type}${t.username_label ? `, ${t.username_label}` : ""}) — ${t.status}` +
+            (t.current_path ? ` · editing ${t.current_path}` : "") +
+            (t.current_task ? ` · ${t.current_task}` : "")
+        )
+        .join("\n");
+      const ws = wsRow as { id: string; name: string; github_repo: string; github_base_branch: string };
+
+      if (agent.status === "pending") {
+        return textResult(
+          `APPROVED: false\nWorkspace: "${ws.name}" (${ws.github_repo})\n\n` +
+            `You are still waiting for approval. Ask the workspace creator to accept "${agent.name}" in the dashboard, then poll again in ~10 seconds.`
+        );
+      }
+      if (agent.status !== "active" || !agent.session_token) {
+        return errorResult(`Your agent status is "${agent.status}". You cannot collaborate.`);
+      }
+      return textResult(
+        `APPROVED: true\nYour session_token: ${agent.session_token}\n` +
+          `Pass it as "session_token" on every other tool call.\n\n` +
+          `Workspace: "${ws.name}" — ${ws.github_repo} (branch ${ws.github_base_branch})\n` +
+          `This is a SHARED cloud filesystem: read_file/edit_file/write_file operate on the same files every agent sees.\n\n` +
+          `TEAM:\n${team || "(just you)"}\n\n` +
+          `WORKFLOW: list_files to orient → read_file (note its version) → claim_files before big edits → ` +
+          `edit_file with the base_version you read → send_message to coordinate. ` +
+          `If edit_file reports a CONFLICT, read_file again and rebase your change.`
+      );
+    }
+  );
+
+  // ---------------- read_file ----------------
+  server.registerTool(
+    "read_file",
+    {
+      description: "Read a file from the shared workspace. Returns its content and version.",
+      inputSchema: { session_token: sessionTokenField, path: pathField },
+    },
+    async ({ session_token, path }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const p = cleanPath(path);
+      if (!p) return errorResult("Invalid path.");
+      const { data } = await supabaseAdmin()
+        .from("workspace_files")
+        .select("*")
+        .eq("workspace_id", agent.workspace_id)
+        .eq("path", p)
+        .single();
+      const file = data as DbFile | null;
+      if (!file) return errorResult(`File not found: ${p}. Use list_files to see what exists.`);
+      await touchAgentPath(agent.id, p);
+      return textResult(`--- ${p} (version ${file.version}) ---\n${file.content}`);
+    }
+  );
+
+  // ---------------- write_file ----------------
+  server.registerTool(
+    "write_file",
+    {
+      description:
+        "Write (create or fully overwrite) a file. Provide base_version when overwriting to enable conflict detection.",
+      inputSchema: {
+        session_token: sessionTokenField,
+        path: pathField,
+        content: z.string().describe("The complete new file content."),
+        base_version: z
+          .number()
+          .int()
+          .optional()
+          .describe("Version you last read. If the file changed since, you get a CONFLICT instead of overwriting."),
+      },
+    },
+    async ({ session_token, path, content, base_version }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const p = cleanPath(path);
+      if (!p) return errorResult("Invalid path.");
+      const db = supabaseAdmin();
+      const { data: existing } = await db
+        .from("workspace_files")
+        .select("*")
+        .eq("workspace_id", agent.workspace_id)
+        .eq("path", p)
+        .single();
+      const row = existing as DbFile | null;
+      if (row) {
+        if (base_version !== undefined && base_version !== row.version) {
+          const who = await agentName(row.updated_by_agent);
+          return errorResult(
+            `CONFLICT on ${p}: you based your write on version ${base_version}, but the file is now version ${row.version} (last edited by ${who}). Call read_file to get the latest content, then re-apply your change.`
+          );
+        }
+        const { error } = await db
+          .from("workspace_files")
+          .update({
+            content,
+            version: row.version + 1,
+            updated_by_agent: agent.id,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("workspace_id", agent.workspace_id)
+          .eq("path", p);
+        if (error) return errorResult(`Write failed: ${error.message}`);
+        await recordEdit(agent.workspace_id, agent, p, row.version, row.version + 1);
+        await touchAgentPath(agent.id, p);
+        return textResult(`Wrote ${p} (version ${row.version} → ${row.version + 1}).`);
+      }
+      const { error } = await db.from("workspace_files").insert({
+        workspace_id: agent.workspace_id,
+        path: p,
+        content,
+        version: 1,
+        updated_by_agent: agent.id,
+      });
+      if (error) return errorResult(`Write failed: ${error.message}`);
+      await recordEdit(agent.workspace_id, agent, p, 0, 1);
+      await touchAgentPath(agent.id, p);
+      return textResult(`Created ${p} (version 1).`);
+    }
+  );
+
+  // ---------------- edit_file ----------------
+  server.registerTool(
+    "edit_file",
+    {
+      description:
+        "Surgically replace old_text with new_text in a file. Requires the version you read: if someone else edited first, you get a CONFLICT instead of clobbering their work.",
+      inputSchema: {
+        session_token: sessionTokenField,
+        path: pathField,
+        old_text: z.string().describe("Exact text to find (first occurrence is replaced)."),
+        new_text: z.string().describe("Replacement text."),
+        base_version: z.number().int().describe("The version returned by your read_file call."),
+      },
+    },
+    async ({ session_token, path, old_text, new_text, base_version }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const p = cleanPath(path);
+      if (!p) return errorResult("Invalid path.");
+      const db = supabaseAdmin();
+      const { data: existing } = await db
+        .from("workspace_files")
+        .select("*")
+        .eq("workspace_id", agent.workspace_id)
+        .eq("path", p)
+        .single();
+      const row = existing as DbFile | null;
+      if (!row) return errorResult(`File not found: ${p}.`);
+      if (row.version !== base_version) {
+        const who = await agentName(row.updated_by_agent);
+        return errorResult(
+          `CONFLICT on ${p}: you based your edit on version ${base_version}, but the file is now version ${row.version} (last edited by ${who}). Call read_file to get the latest content, then re-apply your change.`
+        );
+      }
+      const occurrences = row.content.split(old_text).length - 1;
+      if (occurrences === 0) {
+        return errorResult(`old_text not found in ${p} (version ${row.version}). Read the file again to see its current content.`);
+      }
+      const updated = row.content.replace(old_text, new_text);
+      const { error } = await db
+        .from("workspace_files")
+        .update({
+          content: updated,
+          version: row.version + 1,
+          updated_by_agent: agent.id,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("workspace_id", agent.workspace_id)
+        .eq("path", p);
+      if (error) return errorResult(`Edit failed: ${error.message}`);
+      await recordEdit(agent.workspace_id, agent, p, row.version, row.version + 1);
+      await touchAgentPath(agent.id, p);
+      const note = occurrences > 1 ? ` (first of ${occurrences} occurrences replaced)` : "";
+      return textResult(`Edited ${p} (version ${row.version} → ${row.version + 1})${note}.`);
+    }
+  );
+
+  // ---------------- create_file ----------------
+  server.registerTool(
+    "create_file",
+    {
+      description: "Create a new file. Fails if the file already exists (use write_file to overwrite).",
+      inputSchema: {
+        session_token: sessionTokenField,
+        path: pathField,
+        content: z.string().describe("Initial file content."),
+      },
+    },
+    async ({ session_token, path, content }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const p = cleanPath(path);
+      if (!p) return errorResult("Invalid path.");
+      const db = supabaseAdmin();
+      const { data: existing } = await db
+        .from("workspace_files")
+        .select("path")
+        .eq("workspace_id", agent.workspace_id)
+        .eq("path", p)
+        .single();
+      if (existing) return errorResult(`${p} already exists. Use write_file to overwrite it.`);
+      const { error } = await db.from("workspace_files").insert({
+        workspace_id: agent.workspace_id,
+        path: p,
+        content,
+        version: 1,
+        updated_by_agent: agent.id,
+      });
+      if (error) return errorResult(`Create failed: ${error.message}`);
+      await recordEdit(agent.workspace_id, agent, p, 0, 1);
+      await touchAgentPath(agent.id, p);
+      return textResult(`Created ${p} (version 1).`);
+    }
+  );
+
+  // ---------------- delete_file ----------------
+  server.registerTool(
+    "delete_file",
+    {
+      description: "Delete a file from the shared workspace.",
+      inputSchema: { session_token: sessionTokenField, path: pathField },
+    },
+    async ({ session_token, path }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const p = cleanPath(path);
+      if (!p) return errorResult("Invalid path.");
+      const db = supabaseAdmin();
+      const { data: existing } = await db
+        .from("workspace_files")
+        .select("version")
+        .eq("workspace_id", agent.workspace_id)
+        .eq("path", p)
+        .single();
+      const row = existing as { version: number } | null;
+      if (!row) return errorResult(`File not found: ${p}.`);
+      const { error } = await db
+        .from("workspace_files")
+        .delete()
+        .eq("workspace_id", agent.workspace_id)
+        .eq("path", p);
+      if (error) return errorResult(`Delete failed: ${error.message}`);
+      await recordEdit(agent.workspace_id, agent, p, row.version, 0);
+      return textResult(`Deleted ${p}.`);
+    }
+  );
+
+  // ---------------- list_files ----------------
+  server.registerTool(
+    "list_files",
+    {
+      description: "List files in the shared workspace, with versions.",
+      inputSchema: {
+        session_token: sessionTokenField,
+        prefix: z.string().optional().describe("Only list paths starting with this prefix."),
+      },
+    },
+    async ({ session_token, prefix }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      let q = supabaseAdmin()
+        .from("workspace_files")
+        .select("path, version")
+        .eq("workspace_id", agent.workspace_id)
+        .order("path", { ascending: true })
+        .limit(500);
+      if (prefix) q = q.like("path", `${prefix}%`);
+      const { data, error } = await q;
+      if (error) return errorResult(`List failed: ${error.message}`);
+      const rows = (data ?? []) as { path: string; version: number }[];
+      if (rows.length === 0) return textResult("The workspace is empty. Create the first files!");
+      return textResult(rows.map((r) => `${r.path} (v${r.version})`).join("\n"));
+    }
+  );
+
+  // ---------------- search_files ----------------
+  server.registerTool(
+    "search_files",
+    {
+      description: "Search file paths and contents (case-insensitive substring).",
+      inputSchema: {
+        session_token: sessionTokenField,
+        query: z.string().describe("Text to search for."),
+      },
+    },
+    async ({ session_token, query }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const q = `%${query.replace(/[%_]/g, "")}%`;
+      const { data, error } = await supabaseAdmin()
+        .from("workspace_files")
+        .select("path, content")
+        .eq("workspace_id", agent.workspace_id)
+        .or(`path.ilike.${q},content.ilike.${q}`)
+        .limit(20);
+      if (error) return errorResult(`Search failed: ${error.message}`);
+      const rows = (data ?? []) as { path: string; content: string }[];
+      if (rows.length === 0) return textResult(`No matches for "${query}".`);
+      const lower = query.toLowerCase();
+      const out = rows.map((r) => {
+        const idx = r.content.toLowerCase().indexOf(lower);
+        const snippet =
+          idx === -1
+            ? "(match in path)"
+            : "…" + r.content.slice(Math.max(0, idx - 60), idx + 100).replace(/\n/g, " ") + "…";
+        return `${r.path}: ${snippet}`;
+      });
+      return textResult(out.join("\n"));
+    }
+  );
+
+  // ---------------- send_message ----------------
+  server.registerTool(
+    "send_message",
+    {
+      description:
+        "Send a message to another agent (by name or id), or omit recipient to broadcast to the whole team.",
+      inputSchema: {
+        session_token: sessionTokenField,
+        message: z.string().describe("The message text."),
+        recipient: z
+          .string()
+          .optional()
+          .describe('Agent name (e.g. "Codex #1") or id. Omit to broadcast.'),
+      },
+    },
+    async ({ session_token, message, recipient }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const db = supabaseAdmin();
+      let recipientId: string | null = null;
+      let recipientName = "everyone";
+      if (recipient) {
+        const { data: team } = await db
+          .from("agents")
+          .select("id, name")
+          .eq("workspace_id", agent.workspace_id)
+          .neq("id", agent.id);
+        const match = ((team ?? []) as { id: string; name: string }[]).find(
+          (t) => t.id === recipient || t.name.toLowerCase() === recipient.toLowerCase()
+        );
+        if (!match) {
+          const names = ((team ?? []) as { name: string }[]).map((t) => t.name).join(", ");
+          return errorResult(`No teammate "${recipient}". Team: ${names || "(just you)"}`);
+        }
+        recipientId = match.id;
+        recipientName = match.name;
+      }
+      const { error } = await db.from("messages").insert({
+        workspace_id: agent.workspace_id,
+        sender_agent_id: agent.id,
+        recipient_agent_id: recipientId,
+        message,
+      });
+      if (error) return errorResult(`Send failed: ${error.message}`);
+      return textResult(`Message sent to ${recipientName}.`);
+    }
+  );
+
+  // ---------------- get_messages ----------------
+  server.registerTool(
+    "get_messages",
+    {
+      description: "Read messages sent to you or broadcast to the team, oldest first.",
+      inputSchema: {
+        session_token: sessionTokenField,
+        since: z
+          .string()
+          .optional()
+          .describe("ISO timestamp — only messages after this. Omit for recent history."),
+      },
+    },
+    async ({ session_token, since }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const db = supabaseAdmin();
+      let q = db
+        .from("messages")
+        .select("*")
+        .eq("workspace_id", agent.workspace_id)
+        .or(`recipient_agent_id.is.null,recipient_agent_id.eq.${agent.id},sender_agent_id.eq.${agent.id}`)
+        .order("created_at", { ascending: true })
+        .limit(50);
+      if (since) q = q.gt("created_at", since);
+      const { data, error } = await q;
+      if (error) return errorResult(`Fetch failed: ${error.message}`);
+      const rows = (data ?? []) as {
+        sender_agent_id: string | null;
+        recipient_agent_id: string | null;
+        message: string;
+        created_at: string;
+      }[];
+      if (rows.length === 0) return textResult("No messages yet.");
+      const { data: team } = await db
+        .from("agents")
+        .select("id, name")
+        .eq("workspace_id", agent.workspace_id);
+      const names = Object.fromEntries(
+        ((team ?? []) as { id: string; name: string }[]).map((t) => [t.id, t.name])
+      );
+      const lines = rows.map((m) => {
+        const from = m.sender_agent_id ? names[m.sender_agent_id] ?? "?" : "?";
+        const to = m.recipient_agent_id ? ` → ${names[m.recipient_agent_id] ?? "?"}` : " → everyone";
+        return `[${m.created_at}] ${from}${to}: ${m.message}`;
+      });
+      return textResult(lines.join("\n"));
+    }
+  );
+
+  // ---------------- claim_files ----------------
+  server.registerTool(
+    "claim_files",
+    {
+      description:
+        "Advisory claim on a file while you work on it (expires automatically). Warns — never blocks — if a teammate holds it.",
+      inputSchema: {
+        session_token: sessionTokenField,
+        path: pathField,
+        intent: z.string().optional().describe("What you plan to do, e.g. 'adding JWT refresh'."),
+        ttl_seconds: z.number().int().min(60).max(3600).optional().describe("Claim lifetime (default 300)."),
+      },
+    },
+    async ({ session_token, path, intent, ttl_seconds }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const p = cleanPath(path);
+      if (!p) return errorResult("Invalid path.");
+      const db = supabaseAdmin();
+      const { data: existing } = await db
+        .from("claims")
+        .select("*, agents!inner(name)")
+        .eq("workspace_id", agent.workspace_id)
+        .eq("path", p)
+        .gt("expires_at", new Date().toISOString())
+        .neq("agent_id", agent.id)
+        .single();
+      let warning = "";
+      if (existing) {
+        const holder = existing as unknown as { intent: string | null; agents: { name: string } };
+        warning =
+          `WARNING: ${holder.agents.name} currently holds ${p}` +
+          (holder.intent ? ` ("${holder.intent}")` : "") +
+          `. This is advisory — you may proceed, but coordinate via send_message to avoid conflicts.\n\n`;
+      }
+      const ttl = ttl_seconds ?? 300;
+      const { error } = await db.from("claims").upsert(
+        {
+          workspace_id: agent.workspace_id,
+          agent_id: agent.id,
+          path: p,
+          intent: intent ?? null,
+          expires_at: new Date(Date.now() + ttl * 1000).toISOString(),
+        },
+        { onConflict: "workspace_id,path" }
+      );
+      if (error) return errorResult(`Claim failed: ${error.message}`);
+      return textResult(`${warning}Claimed ${p} for ${ttl}s${intent ? ` — "${intent}"` : ""}.`);
+    }
+  );
+
+  // ---------------- release_files ----------------
+  server.registerTool(
+    "release_files",
+    {
+      description: "Release your claim on a file.",
+      inputSchema: { session_token: sessionTokenField, path: pathField },
+    },
+    async ({ session_token, path }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const p = cleanPath(path);
+      if (!p) return errorResult("Invalid path.");
+      const { error, count } = await supabaseAdmin()
+        .from("claims")
+        .delete({ count: "exact" })
+        .eq("workspace_id", agent.workspace_id)
+        .eq("path", p)
+        .eq("agent_id", agent.id);
+      if (error) return errorResult(`Release failed: ${error.message}`);
+      return textResult(count ? `Released ${p}.` : `You hold no claim on ${p}.`);
+    }
+  );
+
+  // ---------------- get_diff ----------------
+  server.registerTool(
+    "get_diff",
+    {
+      description: "See what has changed in the workspace: every file with its version and last editor.",
+      inputSchema: { session_token: sessionTokenField },
+    },
+    async ({ session_token }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const db = supabaseAdmin();
+      const { data, error } = await db
+        .from("workspace_files")
+        .select("path, version, updated_by_agent, updated_at")
+        .eq("workspace_id", agent.workspace_id)
+        .order("path", { ascending: true });
+      if (error) return errorResult(`Diff failed: ${error.message}`);
+      const rows = (data ?? []) as {
+        path: string;
+        version: number;
+        updated_by_agent: string | null;
+        updated_at: string;
+      }[];
+      if (rows.length === 0) return textResult("Workspace is empty — nothing changed yet.");
+      const { data: team } = await db
+        .from("agents")
+        .select("id, name")
+        .eq("workspace_id", agent.workspace_id);
+      const names = Object.fromEntries(
+        ((team ?? []) as { id: string; name: string }[]).map((t) => [t.id, t.name])
+      );
+      const lines = rows.map(
+        (r) => `${r.path} — v${r.version}, last by ${r.updated_by_agent ? names[r.updated_by_agent] ?? "?" : "?"}`
+      );
+      return textResult(`${rows.length} file(s) in workspace:\n${lines.join("\n")}`);
+    }
+  );
+}
