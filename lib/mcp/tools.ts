@@ -3,6 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { supabaseAdmin } from "../supabase";
 import type { DbAgent, DbFile } from "../db";
 import { agentFromToken, cleanPath, errorResult, textResult } from "./util";
+import { regenerateJoinCode } from "../workspaces";
 
 const sessionTokenField = z
   .string()
@@ -120,6 +121,15 @@ export function registerDuplexTools(server: McpServer) {
         .single();
       if (error || !agent) {
         return errorResult(`Could not register: ${error?.message ?? "unknown error"}`);
+      }
+
+      // Single-use join codes: rotate the code now that this agent has
+      // connected. The agent already holds its agent_id, so rotation doesn't
+      // affect it. Never fail the join over rotation.
+      try {
+        await regenerateJoinCode(ws.id, (wsRow as { created_by: string }).created_by);
+      } catch (e) {
+        console.error("join_workspace: join code rotation failed", e);
       }
 
       return textResult(
