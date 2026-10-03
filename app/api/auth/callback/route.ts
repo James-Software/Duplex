@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { env } from "@/lib/env";
-import { createSessionCookie } from "@/lib/session";
+import { createSessionValue, COOKIE_NAME, MAX_AGE_SECONDS } from "@/lib/session";
 import { supabaseAdmin } from "@/lib/supabase";
 import { githubApi } from "@/lib/github";
 
@@ -94,6 +94,15 @@ export async function GET(request: Request) {
 
   const res = NextResponse.redirect(`${env.appUrl()}/dashboard`);
   res.cookies.set("duplex_oauth_state", "", { maxAge: 0, path: "/" });
-  res.headers.append("Set-Cookie", createSessionCookie(userId));
+  // Set via the cookies API (never a raw Set-Cookie append): raw appends get
+  // mangled when combined with other Set-Cookie headers and the browser
+  // silently drops the session cookie.
+  res.cookies.set(COOKIE_NAME, createSessionValue(userId), {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: MAX_AGE_SECONDS,
+    secure: process.env.NODE_ENV === "production",
+  });
   return res;
 }

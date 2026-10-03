@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "./env";
 
 const COOKIE_NAME = "duplex_session";
-const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
+export const MAX_AGE_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
 interface SessionPayload {
   uid: string;
@@ -23,17 +23,17 @@ function b64urlDecode(s: string): string {
   return Buffer.from(s, "base64url").toString("utf8");
 }
 
-/** Create a `Set-Cookie` value for the given user id. */
-export function createSessionCookie(userId: string): string {
+/** Create the signed session cookie *value* (`body.sig`). Set it via
+ * `res.cookies.set(COOKIE_NAME, ...)` — never via a raw `Set-Cookie` header
+ * append, which can get mangled when combined with other cookies. */
+export function createSessionValue(userId: string): string {
   const payload: SessionPayload = {
     uid: userId,
     exp: Math.floor(Date.now() / 1000) + MAX_AGE_SECONDS,
   };
   const body = b64urlEncode(JSON.stringify(payload));
   const sig = createHmac("sha256", signingKey()).update(body).digest("base64url");
-  return `${COOKIE_NAME}=${body}.${sig}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE_SECONDS}; ${
-    process.env.NODE_ENV === "production" ? "Secure;" : ""
-  }`;
+  return `${body}.${sig}`;
 }
 
 /** Verify a session cookie value; returns the user id or null. */
@@ -53,12 +53,6 @@ export function verifySessionCookie(cookieValue: string | undefined): string | n
   } catch {
     return null;
   }
-}
-
-export function clearSessionCookie(): string {
-  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; ${
-    process.env.NODE_ENV === "production" ? "Secure;" : ""
-  }`;
 }
 
 export { COOKIE_NAME };
