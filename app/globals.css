@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "TASA Orbiter", "Geist", system-ui, sans-serif;
+  --font-sans: "Geist", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Greyscale base */
+  --color-ink: #171717;
+  --color-muted: #737373;
+  --color-faint: #a3a3a3;
+  --color-line: #e5e5e5;
+  --color-wash: #fafafa;
+  --color-card: #ffffff;
+
+  /* Duplex green — lighter/fresher than Greptile's forest rgb(16,122,77) */
+  --color-accent: #16a34a;
+  --color-accent-dark: #15803d;
+  --color-accent-soft: #f0fdf4;
+  --color-accent-line: #bbf7d0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-wash);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* House motion rule: every button presses to 0.97 */
+.btn {
+  transition-property: transform, background-color, border-color, color, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn {
+    transition-duration: 0.01ms;
+  }
+  .btn:active {
+    transform: none;
+  }
+}
