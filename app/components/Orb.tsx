@@ -8,6 +8,10 @@ const DASH_LEN = 5; // fixed for every particle — "same size" is the rule
 const DASH_HALF = DASH_LEN / 2;
 const DASH_W_NEAR = 3; // stroke width at the cursor
 const DASH_W_FAR = 1.5; // stroke width far from the cursor
+const DEPTH_NORM = 1.6; // sphere-space z range for depth normalization
+const DEPTH_SCALE_MIN = 0.7; // dash scale at the back of the sphere
+const DEPTH_SCALE_MAX = 1.3; // dash scale at the front of the sphere
+const DEPTH_ALPHA_MIN = 0.65; // back-of-sphere opacity (front is fully opaque)
 const FOLLOW_LERP = 0.025; // slow, dreamy trailing
 const SUCK_IN_LERP = 0.12; // quick grab when hovering a control
 const SUCK_OUT_LERP = 0.028; // long gentle release (~0.6s ease-out), no snap
@@ -54,8 +58,10 @@ function hash01(i: number, salt: number): number {
  * on a transparent canvas over the light page surface. Every dash faces the way
  * it orbits — tangential to the sphere, always to the side like the rotation.
  * The signature motion is a slow gather/disperse loop: tight dense shell <->
- * wide drifting cloud. The orb trails the cursor; hovering any button/link sucks
- * every dash into the mouse, where they stream in and vanish.
+ * contained drifting cloud (deliberately tamed — less growth, less scatter). The orb trails the cursor; hovering any button/link sucks
+ * every dash into the mouse, where they stream in and vanish. Subtle 3D depth
+ * cueing: dashes nearer the viewer render slightly larger and more opaque,
+ * farther ones smaller and fainter — the sphere reads as a volume.
  */
 export default function Orb() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -167,17 +173,20 @@ export default function Orb() {
       const baseR = Math.min(w, h) * 0.35;
 
       // The Antigravity signature: slow gather/disperse loop.
-      // 0 = tight dense shell, 1 = wide drifting cloud. ~11s loop, shaped
-      // to linger in the tight state and bloom outward gracefully.
+      // 0 = tight dense shell, ~0.7 = contained drifting cloud. ~11s loop,
+      // shaped to linger in the tight state and bloom outward gracefully.
+      // Tamed on purpose: the peak is capped so the orb grows and scatters
+      // less — tighter, more contained, cleaner.
       const dcycle = (t / 11000) * Math.PI * 2 - Math.PI / 2;
       let disperse = 0.5 + 0.5 * Math.sin(dcycle);
-      disperse = Math.pow(disperse, 1.6);
+      disperse = Math.pow(disperse, 1.6) * 0.7;
 
-      // Subtle breathing on top of the dispersal (~5s and ~7.3s periods).
+      // Gentle breathing on top of the dispersal (~5s and ~7.3s periods).
+      // Kept small so the motion feels calm, not bouncy.
       const breathe =
         1 +
-        0.05 * Math.sin((t / 5000) * Math.PI * 2) +
-        0.025 * Math.sin((t / 7300) * Math.PI * 2 + 1.7);
+        0.03 * Math.sin((t / 5000) * Math.PI * 2) +
+        0.015 * Math.sin((t / 7300) * Math.PI * 2 + 1.7);
       const R = baseR * breathe;
 
       // Very slow rotation underneath.
@@ -223,6 +232,16 @@ export default function Orb() {
         const sx = cx + x1 * R * s;
         const sy = cy + y1 * R * s;
 
+        // Depth cueing: z2 > 0 recedes from the viewer (perspective shrinks
+        // it), z2 < 0 approaches. Normalize to a frontness factor — 1 at the
+        // front of the sphere, 0 at the back — then derive a smooth dash
+        // scale (0.7x back -> 1.3x front) and a subtle opacity falloff. This
+        // composes with the suck-in vanish and mouse-proximity width below.
+        const depthN = Math.max(-1, Math.min(1, z2 / DEPTH_NORM));
+        const frontness = 0.5 - 0.5 * depthN;
+        const depthScale = DEPTH_SCALE_MIN + (DEPTH_SCALE_MAX - DEPTH_SCALE_MIN) * frontness;
+        const depthAlpha = DEPTH_ALPHA_MIN + (1 - DEPTH_ALPHA_MIN) * frontness;
+
         // Suck-in: stream toward the cursor with accelerating ease,
         // staggered per particle; vanish as they arrive.
         const si = Math.min(1, Math.max(0, suck * 1.25 - p.stagger * 0.25));
@@ -230,7 +249,7 @@ export default function Orb() {
         const px = sx + (mouseX - sx) * ease;
         const py = sy + (mouseY - sy) * ease;
         const d = Math.hypot(px - mouseX, py - mouseY);
-        const alpha = 1 - si * (1 - Math.min(1, d / VANISH_RADIUS));
+        const alpha = (1 - si * (1 - Math.min(1, d / VANISH_RADIUS))) * depthAlpha;
 
         if (alpha <= 0.01) continue;
 
@@ -238,7 +257,8 @@ export default function Orb() {
         // always to the side, perpendicular to its radial vector, in the
         // rotation direction. The tangent of Y-rotation at (x, y, z) is
         // (z, 0, -x); rotate it through the same rotY -> rotX chain as the
-        // positions and take the 2D direction. Fixed length — never scaled.
+        // positions and take the 2D direction. Length is scaled by depth
+        // (see depthScale above); width stays driven by cursor proximity.
         let dx = z * cosY - x * sinY;
         let dy = (z * sinY + x * cosY) * sinX;
         const tmag = Math.hypot(dx, dy);
@@ -254,12 +274,14 @@ export default function Orb() {
 
         ctx.globalAlpha = alpha;
         // Stroke width falls off smoothly with cursor distance:
-        // ~3px near the mouse, ~1.5px far away. Length stays uniform.
+        // ~3px near the mouse, ~1.5px far away. Length is scaled by depth
+        // so the sphere reads as a volume; width stays the cursor cue.
         const wt = Math.min(1, d / diag);
         ctx.lineWidth = DASH_W_FAR + (DASH_W_NEAR - DASH_W_FAR) * (1 - wt) * (1 - wt);
+        const half = DASH_HALF * depthScale;
         ctx.beginPath();
-        ctx.moveTo(px - dx * DASH_HALF, py - dy * DASH_HALF);
-        ctx.lineTo(px + dx * DASH_HALF, py + dy * DASH_HALF);
+        ctx.moveTo(px - dx * half, py - dy * half);
+        ctx.lineTo(px + dx * half, py + dy * half);
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
