@@ -180,6 +180,9 @@ export default function WorkspaceLive({ workspaceId }: { workspaceId: string }) 
                   {a.current_path && (
                     <p className="font-mono text-xs text-faint">{a.current_path}</p>
                   )}
+                  {a.current_task && (
+                    <p className="text-xs text-muted">{a.current_task}</p>
+                  )}
                 </div>
               </div>
               <span className="font-mono text-xs text-faint">{a.client_type}</span>
