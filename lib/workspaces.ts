@@ -5,12 +5,12 @@ import type { DbUser, DbWorkspace } from "./db";
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no ambiguous chars
 const JOIN_CODE_TTL_MINUTES = 30;
 
-/** Generate a code like "M7K4-P9Q2". */
+/** Generate a code like "M7K4-P9Q2-X3B8-D5F6". */
 export function generateJoinCode(): string {
   const pick = () =>
     CODE_ALPHABET[Math.floor(Math.random() * CODE_ALPHABET.length)];
   const group = () => Array.from({ length: 4 }, pick).join("");
-  return `${group()}-${group()}`;
+  return `${group()}-${group()}-${group()}-${group()}`;
 }
 
 export function joinCodeExpiry(): string {

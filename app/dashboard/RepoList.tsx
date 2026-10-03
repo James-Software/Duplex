@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { GitHubRepo } from "@/lib/github";
+import CloseSessionModal from "./CloseSessionModal";
 
 interface RepoListProps {
   repos: GitHubRepo[];
@@ -23,6 +24,7 @@ export default function RepoList({ repos, sessions }: RepoListProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [busyRepo, setBusyRepo] = useState<string | null>(null);
+  const [closingId, setClosingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const filtered = useMemo(() => {
@@ -101,12 +103,21 @@ export default function RepoList({ repos, sessions }: RepoListProps) {
               <p className="mt-3 font-mono text-xs text-faint">{meta}</p>
               <div className="mt-auto pt-4">
                 {sessionId ? (
-                  <Link
-                    href={`/dashboard/${sessionId}`}
-                    className="btn inline-flex rounded-full border border-line px-4 py-2 text-sm font-medium text-ink hover:border-accent hover:text-accent-dark"
-                  >
-                    Open Session →
-                  </Link>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/dashboard/${sessionId}`}
+                      className="btn inline-flex rounded-full border border-line px-4 py-2 text-sm font-medium text-ink hover:border-accent hover:text-accent-dark"
+                    >
+                      Open Session →
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => setClosingId(sessionId)}
+                      className="btn rounded-full bg-red-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-red-700"
+                    >
+                      Close Session
+                    </button>
+                  </div>
                 ) : (
                   <button
                     type="button"
@@ -130,6 +141,16 @@ export default function RepoList({ repos, sessions }: RepoListProps) {
             : "No repositories match your search."}
         </p>
       )}
+
+      <CloseSessionModal
+        workspaceId={closingId ?? ""}
+        open={closingId !== null}
+        onClose={() => setClosingId(null)}
+        onClosed={() => {
+          setClosingId(null);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }
