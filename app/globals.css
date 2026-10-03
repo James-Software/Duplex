@@ -101,25 +101,25 @@ body {
   0% {
     transform: translateY(0);
   }
-  12.5% {
+  24% {
     transform: translateY(-1em);
   }
-  25% {
+  43.3% {
     transform: translateY(-2em);
   }
-  37.5% {
+  58.6% {
     transform: translateY(-3em);
   }
-  50% {
+  70.9% {
     transform: translateY(-4em);
   }
-  62.5% {
+  80.8% {
     transform: translateY(-5em);
   }
-  75% {
+  88.7% {
     transform: translateY(-6em);
   }
-  87.5% {
+  95% {
     transform: translateY(-7em);
   }
   100% {
