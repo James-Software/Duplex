@@ -15,6 +15,7 @@ export default function ConnectSection({
   appUrl,
   username,
   workspaceName,
+  active,
 }: {
   workspaceId: string;
   initialCode: string;
@@ -22,6 +23,8 @@ export default function ConnectSection({
   appUrl: string;
   username: string;
   workspaceName: string;
+  /** False for finalized workspaces — their join codes never auto-regenerate. */
+  active: boolean;
 }) {
   const [code, setCode] = useState(initialCode);
   const [expires, setExpires] = useState(expiresAt);
@@ -32,6 +35,7 @@ export default function ConnectSection({
         workspaceId={workspaceId}
         code={code}
         expires={expires}
+        autoRegenerate={active}
         onRegenerated={(newCode, newExpires) => {
           setCode(newCode);
           setExpires(newExpires);

@@ -58,6 +58,7 @@ export default async function WorkspacePage({
             appUrl={env.appUrl()}
             username={user.github_username}
             workspaceName={ws.name}
+            active={ws.status === "active"}
           />
           <WorkspaceLive workspaceId={ws.id} />
           <FinalizeBox workspaceId={ws.id} finalized={ws.status === "finalized"} />
