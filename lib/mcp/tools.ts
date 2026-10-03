@@ -51,6 +51,47 @@ async function touchAgentPath(agentId: string, path: string) {
     .eq("id", agentId);
 }
 
+/**
+ * Check whether a rival agent holds an unexpired claim (lock) on a path.
+ * Returns the holder's name/intent when blocked, null when the caller may proceed.
+ */
+async function checkFileLock(
+  workspaceId: string,
+  agentId: string,
+  path: string
+): Promise<{ name: string; intent: string | null } | null> {
+  const { data } = await supabaseAdmin()
+    .from("claims")
+    .select("intent, agents!inner(name)")
+    .eq("workspace_id", workspaceId)
+    .eq("path", path)
+    .gt("expires_at", new Date().toISOString())
+    .neq("agent_id", agentId)
+    .single();
+  if (!data) return null;
+  const row = data as unknown as { intent: string | null; agents: { name: string } };
+  return { name: row.agents.name, intent: row.intent };
+}
+
+function lockError(path: string, holder: { name: string; intent: string | null }): string {
+  return (
+    `LOCKED: ${holder.name} holds ${path}` +
+    (holder.intent ? ` ("${holder.intent}")` : "") +
+    `. Message them with send_message to coordinate, or wait for the claim to expire.`
+  );
+}
+
+/** Write an agent's status message (agents.current_task). Shared by set_status and complete. */
+async function writeAgentStatus(
+  agentId: string,
+  status: string
+): Promise<{ error?: string; value: string | null }> {
+  const value = status.trim().slice(0, 140) || null;
+  const { error } = await supabaseAdmin().from("agents").update({ current_task: value }).eq("id", agentId);
+  if (error) return { error: error.message, value: null };
+  return { value };
+}
+
 /** Register every Duplex MCP tool on the given server. */
 export function registerDuplexTools(server: McpServer) {
   // ---------------- join ----------------
@@ -190,9 +231,11 @@ export function registerDuplexTools(server: McpServer) {
           `Workspace: "${ws.name}" — ${ws.github_repo} (branch ${ws.github_base_branch})\n` +
           `This is a SHARED cloud filesystem: read_file/edit_file/write_file operate on the same files every agent sees.\n\n` +
           `TEAM:\n${team || "(just you)"}\n\n` +
-          `WORKFLOW: list_files to orient → read_file (note its version) → claim_files before big edits → ` +
+          `WORKFLOW: list_files to orient → read_file (note its version) → claim_files before big edits (exclusive lock) → ` +
           `edit_file with the base_version you read → send_message to coordinate. ` +
-          `If edit_file reports a CONFLICT, read_file again and rebase your change.`
+          `If edit_file reports a CONFLICT, read_file again and rebase your change. ` +
+          `If a file is LOCKED by a teammate, message them with send_message instead of editing it. ` +
+          `When you are fully done, call complete with a summary of what you changed.`
       );
     }
   );
@@ -247,6 +290,8 @@ export function registerDuplexTools(server: McpServer) {
       const p = cleanPath(path);
       if (!p) return errorResult("Invalid path.");
       const db = supabaseAdmin();
+      const lock = await checkFileLock(agent.workspace_id, agent.id, p);
+      if (lock) return errorResult(lockError(p, lock));
       const { data: existing } = await db
         .from("workspace_files")
         .select("*")
@@ -310,6 +355,8 @@ export function registerDuplexTools(server: McpServer) {
       const p = cleanPath(path);
       if (!p) return errorResult("Invalid path.");
       const db = supabaseAdmin();
+      const lock = await checkFileLock(agent.workspace_id, agent.id, p);
+      if (lock) return errorResult(lockError(p, lock));
       const { data: existing } = await db
         .from("workspace_files")
         .select("*")
@@ -364,6 +411,8 @@ export function registerDuplexTools(server: McpServer) {
       const p = cleanPath(path);
       if (!p) return errorResult("Invalid path.");
       const db = supabaseAdmin();
+      const lock = await checkFileLock(agent.workspace_id, agent.id, p);
+      if (lock) return errorResult(lockError(p, lock));
       const { data: existing } = await db
         .from("workspace_files")
         .select("path")
@@ -398,6 +447,8 @@ export function registerDuplexTools(server: McpServer) {
       const p = cleanPath(path);
       if (!p) return errorResult("Invalid path.");
       const db = supabaseAdmin();
+      const lock = await checkFileLock(agent.workspace_id, agent.id, p);
+      if (lock) return errorResult(lockError(p, lock));
       const { data: existing } = await db
         .from("workspace_files")
         .select("version")
@@ -584,7 +635,7 @@ export function registerDuplexTools(server: McpServer) {
     "claim_files",
     {
       description:
-        "Advisory claim on a file while you work on it (expires automatically). Warns — never blocks — if a teammate holds it.",
+        "Take an exclusive lock on a file while you work on it. Fails if a teammate holds an unexpired lock — message them with send_message to coordinate. Locks auto-expire (default 300s); release with release_files when done.",
       inputSchema: {
         session_token: sessionTokenField,
         path: pathField,
@@ -606,13 +657,13 @@ export function registerDuplexTools(server: McpServer) {
         .gt("expires_at", new Date().toISOString())
         .neq("agent_id", agent.id)
         .single();
-      let warning = "";
       if (existing) {
         const holder = existing as unknown as { intent: string | null; agents: { name: string } };
-        warning =
-          `WARNING: ${holder.agents.name} currently holds ${p}` +
-          (holder.intent ? ` ("${holder.intent}")` : "") +
-          `. This is advisory — you may proceed, but coordinate via send_message to avoid conflicts.\n\n`;
+        return errorResult(
+          `LOCKED: ${holder.agents.name} holds ${p}` +
+            (holder.intent ? ` ("${holder.intent}")` : "") +
+            `. Message them with send_message to coordinate, or wait for the claim to expire.`
+        );
       }
       const ttl = ttl_seconds ?? 300;
       const { error } = await db.from("claims").upsert(
@@ -626,7 +677,7 @@ export function registerDuplexTools(server: McpServer) {
         { onConflict: "workspace_id,path" }
       );
       if (error) return errorResult(`Claim failed: ${error.message}`);
-      return textResult(`${warning}Claimed ${p} for ${ttl}s${intent ? ` — "${intent}"` : ""}.`);
+      return textResult(`Locked ${p} for ${ttl}s${intent ? ` — "${intent}"` : ""}.`);
     }
   );
 
@@ -650,6 +701,60 @@ export function registerDuplexTools(server: McpServer) {
         .eq("agent_id", agent.id);
       if (error) return errorResult(`Release failed: ${error.message}`);
       return textResult(count ? `Released ${p}.` : `You hold no claim on ${p}.`);
+    }
+  );
+
+  // ---------------- set_status ----------------
+  server.registerTool(
+    "set_status",
+    {
+      description:
+        "Set your status message so the team (and the human watching the dashboard) can see what you're working on. Pass an empty string to clear it.",
+      inputSchema: {
+        session_token: sessionTokenField,
+        status: z
+          .string()
+          .describe("Short status, e.g. 'Adding JWT refresh to auth.ts'. Max ~140 chars; empty clears it."),
+      },
+    },
+    async ({ session_token, status }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const { error, value } = await writeAgentStatus(agent.id, status);
+      if (error) return errorResult(`Could not set status: ${error}`);
+      return textResult(value ? `Status set: "${value}".` : "Status cleared.");
+    }
+  );
+
+  // ---------------- complete ----------------
+  server.registerTool(
+    "complete",
+    {
+      description:
+        "Mark yourself done. Releases ALL of your file locks at once. Optionally set a final summary so the team can see what you changed.",
+      inputSchema: {
+        session_token: sessionTokenField,
+        summary: z
+          .string()
+          .optional()
+          .describe("What you did, e.g. 'Added JWT refresh to auth.ts'. Shown as your status."),
+      },
+    },
+    async ({ session_token, summary }) => {
+      const { agent, error: authError } = await agentFromToken(session_token);
+      if (!agent) return errorResult(authError ?? "Invalid session token.");
+      const { count, error } = await supabaseAdmin()
+        .from("claims")
+        .delete({ count: "exact" })
+        .eq("agent_id", agent.id);
+      if (error) return errorResult(`Could not release claims: ${error.message}`);
+      let statusLine = "";
+      if (summary && summary.trim()) {
+        const { error: statusError, value } = await writeAgentStatus(agent.id, summary);
+        if (statusError) return errorResult(`Released claims, but could not set summary: ${statusError}`);
+        statusLine = ` Status: "${value}".`;
+      }
+      return textResult(`Marked complete. Released ${count ?? 0} claimed file(s).${statusLine}`);
     }
   );
 
