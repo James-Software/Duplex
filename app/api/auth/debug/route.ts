@@ -11,8 +11,10 @@ import { getSessionUser } from "@/lib/auth";
 export async function GET(request: Request) {
   const step = new URL(request.url).searchParams.get("step");
   if (step === "set") {
+    // Replicates the callback's EXACT mixed pattern on one response.
     const setCookie = createSessionCookie("debug-probe");
     const res = NextResponse.json({ setCookieHeader: setCookie });
+    res.cookies.set("debug_state", "", { maxAge: 0, path: "/" });
     res.headers.append("Set-Cookie", setCookie);
     return res;
   }
