@@ -214,7 +214,7 @@ export function registerDuplexTools(server: McpServer) {
       const { data: memberRows } = await db
         .from("workspace_members")
         .select("id, workspace_id, join_code, join_code_expires_at, workspace:workspaces!inner(id, name, created_by, status)");
-      const match = ((memberRows ?? []) as {
+      const match = ((memberRows ?? []) as unknown as {
         id: string;
         workspace_id: string;
         join_code: string;
