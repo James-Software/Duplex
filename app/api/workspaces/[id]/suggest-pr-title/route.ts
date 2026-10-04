@@ -41,7 +41,7 @@ export async function POST(
       return NextResponse.json({ error: "Only the workspace owner can finalize." }, { status: 403 });
     }
     const apiKey = process.env.DEEPSEEK_API_KEY;
-    if (!apiKey) return NextResponse.json({ title: null });
+    if (!apiKey) return NextResponse.json({ title: null, reason: "no_key" });
 
     // Same change summary the export uses: per-agent files changed + total.
     const db = supabaseAdmin();
@@ -52,7 +52,7 @@ export async function POST(
       .eq("workspace_id", id)
       .not("updated_by_agent", "is", null);
     const files = (fileRows ?? []) as { path: string; updated_by_agent: string | null }[];
-    if (files.length === 0) return NextResponse.json({ title: null });
+    if (files.length === 0) return NextResponse.json({ title: null, reason: "no_files" });
     const { data: agentRows } = await db
       .from("agents")
       .select("id, name")
@@ -98,16 +98,21 @@ export async function POST(
           ],
         }),
       });
-      if (!res.ok) return NextResponse.json({ title: null });
+      clearTimeout(timer);
+      if (!res.ok) return NextResponse.json({ title: null, reason: `api_${res.status}` });
       const json = (await res.json()) as {
         choices?: { message?: { content?: string } }[];
       };
       const raw = json.choices?.[0]?.message?.content ?? "";
-      return NextResponse.json({ title: sanitizeTitle(raw) });
-    } finally {
+      const title = sanitizeTitle(raw);
+      return NextResponse.json({ title, reason: title ? undefined : "empty_response" });
+    } catch (e) {
       clearTimeout(timer);
+      const reason =
+        e instanceof DOMException && e.name === "AbortError" ? "timeout" : "fetch_error";
+      return NextResponse.json({ title: null, reason });
     }
   } catch {
-    return NextResponse.json({ title: null });
+    return NextResponse.json({ title: null, reason: "server_error" });
   }
 }
