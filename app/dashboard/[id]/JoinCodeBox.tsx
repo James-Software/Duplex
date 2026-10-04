@@ -35,8 +35,8 @@ export default function JoinCodeBox({
     const json = await res.json();
     if (!res.ok) throw new Error(json.error ?? "Failed.");
     onRegeneratedRef.current(
-      json.workspace.join_code,
-      json.workspace.join_code_expires_at
+      json.member.join_code,
+      json.member.join_code_expires_at
     );
   }, [workspaceId]);
 

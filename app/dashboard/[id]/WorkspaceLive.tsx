@@ -12,6 +12,14 @@ interface Agent {
   current_path: string | null;
   current_task: string | null;
   last_seen: string | null;
+  member_id: string | null;
+  /** GitHub username of the member whose join code this agent joined with. */
+  approver: string | null;
+}
+
+interface ViewerInfo {
+  isOwner: boolean;
+  memberId: string | null;
 }
 
 interface FeedItem {
@@ -43,6 +51,7 @@ export default function WorkspaceLive({
   isActive: boolean;
 }) {
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [viewer, setViewer] = useState<ViewerInfo | null>(null);
   const [ownerGithubId, setOwnerGithubId] = useState<number | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
@@ -54,17 +63,28 @@ export default function WorkspaceLive({
   const [modalBusy, setModalBusy] = useState<"approve" | "decline" | null>(null);
   const seenIds = useRef<Set<string>>(new Set());
 
+  // The owner may decide on any agent; a member only on agents that joined
+  // with their own join code.
+  const canDecide = useCallback(
+    (v: ViewerInfo | null, a: Agent) =>
+      !!v && (v.isOwner || (v.memberId !== null && a.member_id === v.memberId)),
+    []
+  );
+
   const ingestTeam = useCallback(
-    (next: Agent[]) => {
+    (next: Agent[], v: ViewerInfo | null) => {
       setAgents(next);
-      if (!isActive) return;
-      const fresh = next.filter((a) => a.status === "pending" && !seenIds.current.has(a.id));
+      setViewer(v);
+      if (!isActive || !v) return;
+      const fresh = next.filter(
+        (a) => a.status === "pending" && !seenIds.current.has(a.id) && canDecide(v, a)
+      );
       if (fresh.length > 0) {
         fresh.forEach((a) => seenIds.current.add(a.id));
         setQueue((q) => [...q, ...fresh]);
       }
     },
-    [isActive]
+    [isActive, canDecide]
   );
 
   const avatarUrl = ownerGithubId
@@ -83,7 +103,7 @@ export default function WorkspaceLive({
         if (cancelled) return;
         if (teamRes.ok) {
           const json = await teamRes.json();
-          ingestTeam((json.agents ?? []) as Agent[]);
+          ingestTeam((json.agents ?? []) as Agent[], (json.viewer ?? null) as ViewerInfo | null);
           if (typeof json.owner_github_id === "number") setOwnerGithubId(json.owner_github_id);
         }
         if (feedRes.ok) setFeed(((await feedRes.json()).feed ?? []) as FeedItem[]);
@@ -108,7 +128,7 @@ export default function WorkspaceLive({
       ]);
       if (teamRes.ok) {
         const json = await teamRes.json();
-        ingestTeam((json.agents ?? []) as Agent[]);
+        ingestTeam((json.agents ?? []) as Agent[], (json.viewer ?? null) as ViewerInfo | null);
         if (typeof json.owner_github_id === "number") setOwnerGithubId(json.owner_github_id);
       }
       if (feedRes.ok) setFeed(((await feedRes.json()).feed ?? []) as FeedItem[]);
@@ -187,53 +207,66 @@ export default function WorkspaceLive({
 
         {pending.length > 0 && (
           <div className="mt-4 space-y-2">
-            {pending.map((a) => (
-              <div
-                key={a.id}
-                className="flex items-center justify-between rounded-xl border border-accent-line bg-accent-soft px-4 py-3"
-              >
-                <div className="flex items-center gap-3">
-                  {avatarUrl && (
-                    <img src={avatarUrl} alt="" className="h-7 w-7 rounded-full" />
-                  )}
-                  <div>
-                    <p className="text-sm font-medium">
-                      {a.name}
-                      <span className="ml-2 font-mono text-xs text-muted">{a.client_type}</span>
-                    </p>
-                    {a.username_label && (
-                      <p className="font-mono text-xs text-muted">@{a.username_label}</p>
+            {pending.map((a) => {
+              const mine = canDecide(viewer, a);
+              return (
+                <div
+                  key={a.id}
+                  className={`flex items-center justify-between rounded-xl border px-4 py-3 ${
+                    mine ? "border-accent-line bg-accent-soft" : "border-line"
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    {avatarUrl && (
+                      <img src={avatarUrl} alt="" className="h-7 w-7 rounded-full" />
                     )}
-                    <p className="text-xs text-faint">awaiting approval</p>
+                    <div>
+                      <p className="text-sm font-medium">
+                        {a.name}
+                        <span className="ml-2 font-mono text-xs text-muted">{a.client_type}</span>
+                      </p>
+                      {a.username_label && (
+                        <p className="font-mono text-xs text-muted">@{a.username_label}</p>
+                      )}
+                      <p className="text-xs text-faint">
+                        {mine
+                          ? "awaiting approval"
+                          : `awaiting approval by @${a.approver ?? "another member"}`}
+                      </p>
+                    </div>
                   </div>
+                  {isActive ? (
+                    mine ? (
+                      <button
+                        onClick={() => requeue(a)}
+                        className="btn rounded-full border border-line px-4 py-1.5 text-sm font-medium hover:border-ink"
+                      >
+                        Review
+                      </button>
+                    ) : null
+                  ) : (
+                    mine && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => decide(a.id, "approve")}
+                          disabled={busy !== null}
+                          className="btn rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-white hover:bg-accent-dark disabled:opacity-50"
+                        >
+                          {busy === a.id + "approve" ? "…" : "Accept"}
+                        </button>
+                        <button
+                          onClick={() => decide(a.id, "decline")}
+                          disabled={busy !== null}
+                          className="btn rounded-full border border-line px-4 py-1.5 text-sm font-medium hover:border-ink disabled:opacity-50"
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    )
+                  )}
                 </div>
-                {isActive ? (
-                  <button
-                    onClick={() => requeue(a)}
-                    className="btn rounded-full border border-line px-4 py-1.5 text-sm font-medium hover:border-ink"
-                  >
-                    Review
-                  </button>
-                ) : (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => decide(a.id, "approve")}
-                      disabled={busy !== null}
-                      className="btn rounded-full bg-accent px-4 py-1.5 text-sm font-semibold text-white hover:bg-accent-dark disabled:opacity-50"
-                    >
-                      {busy === a.id + "approve" ? "…" : "Accept"}
-                    </button>
-                    <button
-                      onClick={() => decide(a.id, "decline")}
-                      disabled={busy !== null}
-                      className="btn rounded-full border border-line px-4 py-1.5 text-sm font-medium hover:border-ink disabled:opacity-50"
-                    >
-                      Decline
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -265,16 +298,18 @@ export default function WorkspaceLive({
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-xs text-faint">{a.client_type}</span>
-                <button
-                  onClick={() => setKickTarget(a)}
-                  aria-label={`Remove ${a.name}`}
-                  title="Remove agent"
-                  className="btn flex h-6 w-6 items-center justify-center rounded-full text-faint hover:bg-red-50 hover:text-red-600"
-                >
-                  <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="h-3 w-3" aria-hidden="true">
-                    <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" />
-                  </svg>
-                </button>
+                {canDecide(viewer, a) && (
+                  <button
+                    onClick={() => setKickTarget(a)}
+                    aria-label={`Remove ${a.name}`}
+                    title="Remove agent"
+                    className="btn flex h-6 w-6 items-center justify-center rounded-full text-faint hover:bg-red-50 hover:text-red-600"
+                  >
+                    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="h-3 w-3" aria-hidden="true">
+                      <path d="M2.5 2.5l7 7M9.5 2.5l-7 7" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
           ))}

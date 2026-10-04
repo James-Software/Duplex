@@ -26,7 +26,8 @@ interface GhCommit {
  */
 export async function finalizeWorkspace(
   workspace: DbWorkspace,
-  owner: DbUser
+  owner: DbUser,
+  prTitle?: string | null
 ): Promise<FinalizeResult> {
   if (!owner.github_token) throw new Error("GitHub token missing — please sign in again.");
   const token = owner.github_token;
@@ -163,7 +164,7 @@ export async function finalizeWorkspace(
       const pr = (await githubApi(token, `/repos/${repo}/pulls`, {
         method: "POST",
         body: JSON.stringify({
-          title: `Duplex: ${workspace.name}`,
+          title: prTitle && prTitle.trim() ? prTitle.trim().slice(0, 150) : `Duplex: ${workspace.name}`,
           head: branchName,
           base: workspace.github_base_branch,
           body: prBody,

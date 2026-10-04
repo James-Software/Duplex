@@ -26,7 +26,7 @@ export default async function DashboardPage() {
   }
 
   // One session per repo: map each repo to its active session, if any.
-  const workspaces = await getUserWorkspaces(user.id);
+  const workspaces = await getUserWorkspaces(user);
   const sessions: Record<string, string> = {};
   for (const ws of workspaces) {
     if (ws.status === "active" && !sessions[ws.github_repo]) {
