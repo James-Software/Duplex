@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import JoinCodeBox from "./JoinCodeBox";
 
 function CopyIcon({ className = "" }: { className?: string }) {
@@ -171,6 +171,36 @@ export default function ConnectPrompt({
   const [agentName, setAgentName] = useState(readAgentNameCookie);
   const [showPrompt, setShowPrompt] = useState(false);
   const [spins, setSpins] = useState(0);
+  // Team names are loaded once in the background so rolling a name is instant.
+  const [takenNames, setTakenNames] = useState<Set<string>>(new Set());
+
+  async function fetchTeamNames(): Promise<Set<string>> {
+    const names = new Set<string>();
+    const res = await fetch(`/api/workspaces/${workspaceId}/team`, {
+      credentials: "same-origin",
+    });
+    if (!res.ok) return names;
+    const json = await res.json();
+    for (const a of (json.agents ?? []) as { name?: string }[]) {
+      const n = (a.name ?? "").trim().toLowerCase();
+      if (n) names.add(n);
+    }
+    return names;
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchTeamNames()
+      .then((names) => {
+        if (!cancelled) setTakenNames(names);
+      })
+      .catch(() => {
+        /* keep the empty set — the roll still works */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId]);
   const effectiveName = agentName.trim() ? agentName.trim() : DEFAULT_AGENT_NAME;
   const prompt = buildPrompt(appUrl, joinCode, username, workspaceName, effectiveName);
 
@@ -179,24 +209,11 @@ export default function ConnectPrompt({
     writeAgentNameCookie(value);
   }
 
-  async function randomizeName() {
+  function randomizeName() {
     setSpins((s) => s + 1);
-    // Check the whole live team so the roll never duplicates an existing name.
-    const taken = new Set<string>();
-    try {
-      const res = await fetch(`/api/workspaces/${workspaceId}/team`, {
-        credentials: "same-origin",
-      });
-      if (res.ok) {
-        const json = await res.json();
-        for (const a of (json.agents ?? []) as { name?: string }[]) {
-          const n = (a.name ?? "").trim().toLowerCase();
-          if (n) taken.add(n);
-        }
-      }
-    } catch {
-      /* team fetch failed — fall back to just avoiding the current value */
-    }
+    // Instant: roll against the background-loaded names, then refresh
+    // the cache for the next roll without blocking this one.
+    const taken = new Set(takenNames);
     const current = agentName.trim().toLowerCase();
     if (current) taken.add(current);
     const options = RANDOM_AGENT_NAMES.filter(
@@ -204,6 +221,11 @@ export default function ConnectPrompt({
     );
     const pool = options.length > 0 ? options : RANDOM_AGENT_NAMES;
     onNameChange(pool[Math.floor(Math.random() * pool.length)]);
+    fetchTeamNames()
+      .then(setTakenNames)
+      .catch(() => {
+        /* stale cache is fine — the next roll still avoids known names */
+      });
   }
 
   return (
