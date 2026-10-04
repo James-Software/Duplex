@@ -35,6 +35,18 @@ export interface DbAgent {
   current_task: string | null;
   last_seen: string | null;
   last_read_at: string | null;
+  /** The workspace_members row whose join code this agent joined with (null = pre-members). */
+  member_id: string | null;
+  created_at: string;
+}
+
+export interface DbWorkspaceMember {
+  id: string;
+  workspace_id: string;
+  /** Normalized to lowercase at write time (GitHub logins are case-insensitive). */
+  github_username: string;
+  join_code: string;
+  join_code_expires_at: string;
   created_at: string;
 }
 

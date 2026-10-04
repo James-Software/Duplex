@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
-import { getWorkspaceForUser } from "@/lib/workspaces";
+import { getViewerAccess } from "@/lib/access";
 import { supabaseAdmin } from "@/lib/supabase";
 
 /**
@@ -16,8 +16,15 @@ export async function POST(
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await params;
-  const ws = await getWorkspaceForUser(id, user.id);
-  if (!ws) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const access = await getViewerAccess(id, user);
+  if (!access) return NextResponse.json({ error: "not found" }, { status: 404 });
+  if (!access.isOwner) {
+    return NextResponse.json(
+      { error: "Only the workspace owner can close it." },
+      { status: 403 }
+    );
+  }
+  const ws = access.workspace;
   if (ws.status !== "active") {
     return NextResponse.json(
       { error: "Only an active workspace can be closed." },

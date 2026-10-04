@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { supabaseAdmin } from "../supabase";
 import type { DbAgent, DbFile } from "../db";
 import { agentFromToken, cleanPath, errorResult, isRecentlyActive, textResult } from "./util";
-import { regenerateJoinCode } from "../workspaces";
+import { rotateMemberJoinCode } from "../access";
 
 const sessionTokenField = z
   .string()
@@ -190,7 +190,7 @@ export function registerDuplexTools(server: McpServer) {
     "join_workspace",
     {
       description:
-        "Request to join a Duplex collaboration workspace using its join code. You start as PENDING — poll get_team_status until the workspace creator approves you.",
+        "Request to join a Duplex collaboration workspace using a member's join code. You start as PENDING — poll get_team_status until a workspace member approves you.",
       inputSchema: {
         code: z.string().describe("The workspace join code, e.g. M7K4-P9Q2-X3B8-D5F6."),
         client_type: z
@@ -209,20 +209,29 @@ export function registerDuplexTools(server: McpServer) {
     async ({ code, client_type, username_label, agent_name }) => {
       const db = supabaseAdmin();
       const needle = normalizeCode(code);
-      const { data: workspaces } = await db.from("workspaces").select("*").eq("status", "active");
-      const ws = (workspaces ?? []).find(
-        (w: { join_code: string }) => normalizeCode(w.join_code) === needle
-      ) as
-        | { id: string; name: string; join_code_expires_at: string }
-        | undefined;
-      if (!ws) {
+      // Join codes are per-member: every workspace member (owner included)
+      // has their own code, and the agent inherits that member as approver.
+      const { data: memberRows } = await db
+        .from("workspace_members")
+        .select("id, workspace_id, join_code, join_code_expires_at, workspace:workspaces!inner(id, name, created_by, status)");
+      const match = ((memberRows ?? []) as {
+        id: string;
+        workspace_id: string;
+        join_code: string;
+        join_code_expires_at: string;
+        workspace: { id: string; name: string; created_by: string; status: string }[];
+      }[]).find(
+        (m) => normalizeCode(m.join_code) === needle && m.workspace[0]?.status === "active"
+      );
+      if (!match || !match.workspace[0]) {
         return errorResult(
-          "Join code not recognized. Check the code with the workspace creator."
+          "Join code not recognized. Check the code with the workspace member who shared it."
         );
       }
-      if (new Date(ws.join_code_expires_at).getTime() < Date.now()) {
+      const ws = match.workspace[0];
+      if (new Date(match.join_code_expires_at).getTime() < Date.now()) {
         return errorResult(
-          "That join code has expired. Ask the workspace creator to regenerate it on the dashboard."
+          "That join code has expired. Ask the workspace member to regenerate it on the dashboard."
         );
       }
       const { count } = await db
@@ -233,17 +242,12 @@ export function registerDuplexTools(server: McpServer) {
       const n = (count ?? 0) + 1;
       const name =
         agent_name?.trim() || `${CLIENT_PREFIX[client_type] ?? "Agent"} #${n}`;
-      // Agents inherit the workspace creator's human identity.
-      const { data: wsRow } = await db
-        .from("workspaces")
-        .select("created_by")
-        .eq("id", ws.id)
-        .single();
       const { data: agent, error } = await db
         .from("agents")
         .insert({
           workspace_id: ws.id,
-          user_id: (wsRow as { created_by: string }).created_by,
+          user_id: ws.created_by,
+          member_id: match.id,
           name,
           client_type,
           username_label: username_label?.trim() || null,
@@ -255,18 +259,18 @@ export function registerDuplexTools(server: McpServer) {
         return errorResult(`Could not register: ${error?.message ?? "unknown error"}`);
       }
 
-      // Single-use join codes: rotate the code now that this agent has
-      // connected. The agent already holds its agent_id, so rotation doesn't
-      // affect it. Never fail the join over rotation.
+      // Single-use join codes: rotate the member's code now that this agent
+      // has connected. The agent already holds its agent_id, so rotation
+      // doesn't affect it. Never fail the join over rotation.
       try {
-        await regenerateJoinCode(ws.id, (wsRow as { created_by: string }).created_by);
+        await rotateMemberJoinCode(match.id);
       } catch (e) {
         console.error("join_workspace: join code rotation failed", e);
       }
 
       return textResult(
         `Join request sent to workspace "${ws.name}" as "${name}" (agent_id: ${(agent as { id: string }).id}).\n` +
-          `STATUS: PENDING — the workspace creator must approve you in the dashboard.\n` +
+          `STATUS: PENDING — the team member who shared this join code must approve you in the dashboard.\n` +
           `Poll get_team_status with your agent_id every ~10 seconds until approved.\n` +
           `When your work is fully done, call complete with a summary of your changes (required).\n` +
           `If you're rejoining after a break, call get_team_status with your agent_id immediately after approval to catch up.`
@@ -330,7 +334,7 @@ export function registerDuplexTools(server: McpServer) {
         const unread = await deliverUnreadMessages(db, agent);
         return textResult(
           `APPROVED: false\nWorkspace: "${ws.name}" (${ws.github_repo})\n\n` +
-            `You are still waiting for approval. Ask the workspace creator to accept "${agent.name}" in the dashboard, then poll again in ~10 seconds.` +
+            `You are still waiting for approval. Ask the team member who shared the join code to accept "${agent.name}" in the dashboard, then poll again in ~10 seconds.` +
             unread
         );
       }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth";
-import { getWorkspaceForUser } from "@/lib/workspaces";
+import { getViewerAccess } from "@/lib/access";
 import { supabaseAdmin } from "@/lib/supabase";
 
 interface FeedItem {
@@ -12,7 +12,7 @@ interface FeedItem {
 }
 
 /**
- * GET /api/workspaces/[id]/feed — merged activity feed (owner only).
+ * GET /api/workspaces/[id]/feed — merged activity feed (owner or member).
  * Combines agent joins, file edits, messages, and claims, newest first.
  * Polled by the dashboard every ~2.5s (reads go through the service_role
  * server-side; RLS stays locked down).
@@ -24,7 +24,7 @@ export async function GET(
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await params;
-  if (!(await getWorkspaceForUser(id, user.id))) {
+  if (!(await getViewerAccess(id, user))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
   }
   const db = supabaseAdmin();

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { diffLines } from "diff";
 import { getSessionUser } from "@/lib/auth";
-import { getWorkspaceForUser } from "@/lib/workspaces";
+import { getViewerAccess } from "@/lib/access";
 import { supabaseAdmin } from "@/lib/supabase";
 import { githubApi } from "@/lib/github";
 
@@ -132,7 +132,7 @@ async function mapPool<T, R>(
 
 /**
  * GET /api/workspaces/[id]/diff — GitHub-style diff of agent changes vs the
- * GitHub base SHA (owner only). Same file set as the export: files touched by
+ * GitHub base SHA (owner or member). Same file set as the export: files touched by
  * agents, plus deleted files recovered from the edits log.
  */
 export async function GET(
@@ -142,8 +142,9 @@ export async function GET(
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   const { id } = await params;
-  const ws = await getWorkspaceForUser(id, user.id);
-  if (!ws) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const access = await getViewerAccess(id, user);
+  if (!access) return NextResponse.json({ error: "not found" }, { status: 404 });
+  const ws = access.workspace;
   if (!user.github_token) {
     return NextResponse.json(
       { error: "GitHub token missing. Please sign in again." },

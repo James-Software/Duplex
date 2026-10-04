@@ -6,7 +6,7 @@ import { createWorkspace, getUserWorkspaces } from "@/lib/workspaces";
 export async function GET() {
   const user = await getSessionUser();
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  const workspaces = await getUserWorkspaces(user.id);
+  const workspaces = await getUserWorkspaces(user);
   return NextResponse.json({ workspaces });
 }
 

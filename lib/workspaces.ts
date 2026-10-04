@@ -137,7 +137,7 @@ export async function createWorkspace(
     throw new Error("GitHub token missing — please sign in again.");
   }
 
-  const existing = await getActiveWorkspaceByRepo(user.id, repo);
+  const existing = await getActiveWorkspaceByRepo(user, repo);
   if (existing) {
     throw new Error("A session already exists for this repository.");
   }
@@ -190,6 +190,18 @@ export async function createWorkspace(
   }
   const workspace = data as DbWorkspace;
 
+  // The owner is also a member (with their own join code) so the whole
+  // per-member code flow works uniformly.
+  const { error: memberError } = await db.from("workspace_members").insert({
+    workspace_id: workspace.id,
+    github_username: user.github_username.trim().toLowerCase(),
+    join_code: generateJoinCode(),
+    join_code_expires_at: joinCodeExpiry(),
+  });
+  if (memberError) {
+    throw new Error(`Could not create workspace: ${memberError.message}`);
+  }
+
   // Seed the cloud filesystem with the repo's files. Non-fatal: if seeding
   // fails the workspace simply starts empty and agents create files from scratch.
   try {
@@ -206,62 +218,75 @@ export async function createWorkspace(
   return workspace;
 }
 
-export async function getUserWorkspaces(userId: string): Promise<DbWorkspace[]> {
-  const { data, error } = await supabaseAdmin()
+/** Workspaces the user can open: owned OR shared with them as a member. */
+export async function getUserWorkspaces(user: DbUser): Promise<DbWorkspace[]> {
+  const db = supabaseAdmin();
+  const { data: owned, error: ownedError } = await db
     .from("workspaces")
     .select("*")
-    .eq("created_by", userId)
-    .order("created_at", { ascending: false });
-  if (error) throw new Error(error.message);
-  return (data ?? []) as DbWorkspace[];
+    .eq("created_by", user.id);
+  if (ownedError) throw new Error(ownedError.message);
+  const { data: memberships } = await db
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("github_username", user.github_username.trim().toLowerCase());
+  const memberIds = ((memberships ?? []) as { workspace_id: string }[]).map(
+    (m) => m.workspace_id
+  );
+  let shared: DbWorkspace[] = [];
+  if (memberIds.length > 0) {
+    const { data, error } = await db
+      .from("workspaces")
+      .select("*")
+      .in("id", memberIds);
+    if (error) throw new Error(error.message);
+    shared = (data ?? []) as DbWorkspace[];
+  }
+  const byId = new Map<string, DbWorkspace>();
+  for (const w of [...((owned ?? []) as DbWorkspace[]), ...shared]) byId.set(w.id, w);
+  return [...byId.values()].sort((a, b) =>
+    b.created_at.localeCompare(a.created_at)
+  );
 }
 
-export async function getWorkspaceForUser(
-  workspaceId: string,
-  userId: string
-): Promise<DbWorkspace | null> {
-  const { data, error } = await supabaseAdmin()
-    .from("workspaces")
-    .select("*")
-    .eq("id", workspaceId)
-    .eq("created_by", userId)
-    .single();
-  if (error || !data) return null;
-  return data as DbWorkspace;
-}
-
-/** The active session bound to a repo, if any — one session per repo. */
+/** The active session bound to a repo, if any — one session per repo.
+ *  Considers workspaces the user owns OR is a member of, so a member can't
+ *  open a duplicate session for a repo that's already shared with them. */
 export async function getActiveWorkspaceByRepo(
-  userId: string,
+  user: DbUser,
   repo: string
 ): Promise<DbWorkspace | null> {
-  const { data, error } = await supabaseAdmin()
+  const db = supabaseAdmin();
+  const { data: owned, error: ownedError } = await db
     .from("workspaces")
     .select("*")
-    .eq("created_by", userId)
+    .eq("created_by", user.id)
     .eq("github_repo", repo)
     .eq("status", "active")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (error || !data) return null;
-  return data as DbWorkspace;
+  if (ownedError) throw new Error(ownedError.message);
+  if (owned) return owned as DbWorkspace;
+  const { data: memberships } = await db
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("github_username", user.github_username.trim().toLowerCase());
+  const memberIds = ((memberships ?? []) as { workspace_id: string }[]).map(
+    (m) => m.workspace_id
+  );
+  if (memberIds.length === 0) return null;
+  const { data, error } = await db
+    .from("workspaces")
+    .select("*")
+    .in("id", memberIds)
+    .eq("github_repo", repo)
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return (data as DbWorkspace | null) ?? null;
 }
 
-/** Issue a fresh join code (invalidates the old one). */
-export async function regenerateJoinCode(
-  workspaceId: string,
-  userId: string
-): Promise<DbWorkspace> {
-  const ws = await getWorkspaceForUser(workspaceId, userId);
-  if (!ws) throw new Error("Workspace not found.");
-  if (ws.status !== "active") throw new Error("Workspace is not active.");
-  const { data, error } = await supabaseAdmin()
-    .from("workspaces")
-    .update({ join_code: generateJoinCode(), join_code_expires_at: joinCodeExpiry() })
-    .eq("id", workspaceId)
-    .select("*")
-    .single();
-  if (error || !data) throw new Error("Could not regenerate join code.");
-  return data as DbWorkspace;
-}
+

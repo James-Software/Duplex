@@ -10,6 +10,6 @@ export async function GET(request: Request) {
   if (!repo) {
     return NextResponse.json({ error: "Missing ?repo=owner/name." }, { status: 400 });
   }
-  const workspace = await getActiveWorkspaceByRepo(user.id, repo);
+  const workspace = await getActiveWorkspaceByRepo(user, repo);
   return NextResponse.json({ workspace });
 }
