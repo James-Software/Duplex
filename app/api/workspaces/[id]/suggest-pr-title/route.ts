@@ -80,6 +80,9 @@ export async function POST(
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${apiKey}`,
+          // Azure-hosted endpoints sometimes expect the classic api-key header
+          // instead of (or in addition to) the Bearer scheme.
+          "api-key": apiKey,
         },
         body: JSON.stringify({
           model: "Deepseek-V4.1-Flash",
