@@ -185,7 +185,17 @@ export default async function LandingPage({
       <footer className="relative z-10 border-t border-line bg-card">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
           <span className="font-display text-sm font-semibold">Duplex</span>
-          <span className="font-mono text-xs text-faint">Built @ Dublin HackX 2026</span>
+          <div className="flex items-center gap-4">
+            <a
+              href="https://github.com/James-Software/Duplex/blob/main/PRIVACY.md"
+              target="_blank"
+              rel="noreferrer"
+              className="btn font-mono text-xs text-muted hover:text-ink"
+            >
+              Privacy
+            </a>
+            <span className="font-mono text-xs text-faint">Built @ Dublin HackX 2026</span>
+          </div>
         </div>
       </footer>
     </div>
