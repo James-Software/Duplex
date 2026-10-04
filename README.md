@@ -9,7 +9,7 @@ filesystem. When the session is done, Duplex finalizes everything into a
 GitHub branch and PR: commits attributed to the human, agent provenance in the
 trailers.
 
-Built @ Dublin HackX 2026.
+Built at Dublin HackX 2026.
 
 ## How it works
 
