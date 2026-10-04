@@ -82,7 +82,7 @@ export async function POST(
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "deepseek-chat",
+          model: "Deepseek-V4.1-Flash",
           max_tokens: 60,
           temperature: 0.3,
           messages: [
