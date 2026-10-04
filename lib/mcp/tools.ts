@@ -219,16 +219,16 @@ export function registerDuplexTools(server: McpServer) {
         workspace_id: string;
         join_code: string;
         join_code_expires_at: string;
-        workspace: { id: string; name: string; created_by: string; status: string }[];
+        workspace: { id: string; name: string; created_by: string; status: string };
       }[]).find(
-        (m) => normalizeCode(m.join_code) === needle && m.workspace[0]?.status === "active"
+        (m) => normalizeCode(m.join_code) === needle && m.workspace?.status === "active"
       );
-      if (!match || !match.workspace[0]) {
+      if (!match) {
         return errorResult(
           "Join code not recognized. Check the code with the workspace member who shared it."
         );
       }
-      const ws = match.workspace[0];
+      const ws = match.workspace;
       if (new Date(match.join_code_expires_at).getTime() < Date.now()) {
         return errorResult(
           "That join code has expired. Ask the workspace member to regenerate it on the dashboard."

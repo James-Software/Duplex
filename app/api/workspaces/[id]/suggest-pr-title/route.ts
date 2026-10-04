@@ -3,7 +3,7 @@ import { getSessionUser } from "@/lib/auth";
 import { getViewerAccess } from "@/lib/access";
 import { supabaseAdmin } from "@/lib/supabase";
 
-const DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
+const DEEPSEEK_URL = "https://lacuna-resource.services.ai.azure.com/openai/v1/chat/completions";
 const SUGGEST_TIMEOUT_MS = 15_000;
 
 /** Clean a model completion into a safe single-line PR title. */
