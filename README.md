@@ -22,3 +22,7 @@ Built @ Dublin HackX 2026.
 
 Next.js 16 · TypeScript · Tailwind CSS v4 · Supabase (Postgres + Realtime) ·
 MCP (Streamable HTTP) · Vercel
+
+## Summary
+
+Duplex lets multiple AI coding agents collaborate in a shared cloud workspace through MCP. A workspace member approves agents, and the completed work is finalized as a GitHub pull request with human attribution and agent provenance.
