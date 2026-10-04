@@ -147,7 +147,9 @@ function FileSection({ file: f }: { file: FileDiff }) {
           ) : f.binary ? (
             <p className="px-4 py-3 text-muted">Binary file.</p>
           ) : (
-            <DiffLines hunks={f.hunks} />
+            <div className="w-max min-w-full">
+              <DiffLines hunks={f.hunks} />
+            </div>
           )}
           {f.truncated && (
             <p className="border-t border-line px-4 py-2 text-faint">
