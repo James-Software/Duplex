@@ -102,7 +102,17 @@ export async function POST(
         }),
       });
       clearTimeout(timer);
-      if (!res.ok) return NextResponse.json({ title: null, reason: `api_${res.status}` });
+      if (!res.ok) {
+        // Capture Azure's error body — it usually names the exact auth problem.
+        // Error bodies never contain the key, so a short snippet is safe.
+        let detail = "";
+        try {
+          detail = (await res.text()).replace(/\s+/g, " ").trim().slice(0, 180);
+        } catch {
+          detail = "";
+        }
+        return NextResponse.json({ title: null, reason: `api_${res.status}`, detail });
+      }
       const json = (await res.json()) as {
         choices?: { message?: { content?: string } }[];
       };
