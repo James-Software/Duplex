@@ -133,7 +133,7 @@ function buildPrompt(
     `   username_label: "${username}"`,
     ``,
     `3. You start as PENDING. Poll get_team_status with your agent_id every`,
-    `   ~10 seconds until the workspace creator approves you. Then pass the`,
+    `   2 seconds until the workspace creator approves you. Then pass the`,
     `   session_token it returns on every other tool call. Keep polling`,
     `   get_team_status periodically while you work; messages from your`,
     `   teammates are delivered there, even if you never call get_messages.`,
