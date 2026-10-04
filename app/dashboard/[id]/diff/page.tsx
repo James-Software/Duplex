@@ -36,6 +36,23 @@ function XIcon({ className = "" }: { className?: string }) {
   );
 }
 
+function ChevronIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className={className}
+    >
+      <path d="M4 6l4 4 4-4" />
+    </svg>
+  );
+}
+
 function StatusBadge({ status }: { status: FileDiff["status"] }) {
   if (status === "added")
     return (
@@ -95,6 +112,51 @@ function DiffLines({ hunks }: { hunks: { lines: DiffLine[] }[] }) {
         </div>
       ))}
     </>
+  );
+}
+
+function FileSection({ file: f }: { file: FileDiff }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <section className="mb-5 overflow-hidden rounded-2xl border border-line bg-card">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="btn flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left hover:bg-wash"
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <ChevronIcon
+            className={`h-3.5 w-3.5 shrink-0 text-muted transition-transform duration-150 ${
+              open ? "" : "-rotate-90"
+            }`}
+          />
+          <span className="truncate font-mono text-sm font-medium">
+            {f.path}
+          </span>
+          <StatusBadge status={f.status} />
+        </div>
+        <span className="shrink-0 font-mono text-xs">
+          <span className="text-accent-dark">+{f.additions}</span>{" "}
+          <span className="text-red-600">−{f.deletions}</span>
+        </span>
+      </button>
+      {open && (
+        <div className="overflow-x-auto border-t border-line py-1 font-mono text-xs leading-5">
+          {f.tooLarge ? (
+            <p className="px-4 py-3 text-muted">File too large to diff.</p>
+          ) : f.binary ? (
+            <p className="px-4 py-3 text-muted">Binary file.</p>
+          ) : (
+            <DiffLines hunks={f.hunks} />
+          )}
+          {f.truncated && (
+            <p className="border-t border-line px-4 py-2 text-faint">
+              Diff truncated: showing the first 300 lines.
+            </p>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -169,41 +231,7 @@ export default function DiffPage() {
           </p>
         )}
         {files !== null &&
-          files.map((f) => (
-            <section
-              key={f.path}
-              className="mb-5 overflow-hidden rounded-2xl border border-line bg-card"
-            >
-              <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="truncate font-mono text-sm font-medium">
-                    {f.path}
-                  </span>
-                  <StatusBadge status={f.status} />
-                </div>
-                <span className="shrink-0 font-mono text-xs">
-                  <span className="text-accent-dark">+{f.additions}</span>{" "}
-                  <span className="text-red-600">−{f.deletions}</span>
-                </span>
-              </div>
-              <div className="overflow-x-auto py-1 font-mono text-xs leading-5">
-                {f.tooLarge ? (
-                  <p className="px-4 py-3 text-muted">
-                    File too large to diff.
-                  </p>
-                ) : f.binary ? (
-                  <p className="px-4 py-3 text-muted">Binary file.</p>
-                ) : (
-                  <DiffLines hunks={f.hunks} />
-                )}
-                {f.truncated && (
-                  <p className="border-t border-line px-4 py-2 text-faint">
-                    Diff truncated: showing the first 300 lines.
-                  </p>
-                )}
-              </div>
-            </section>
-          ))}
+          files.map((f) => <FileSection key={f.path} file={f} />)}
       </main>
     </div>
   );
