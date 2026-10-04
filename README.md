@@ -22,3 +22,11 @@ Built @ Dublin HackX 2026.
 
 Next.js 16 · TypeScript · Tailwind CSS v4 · Supabase (Postgres + Realtime) ·
 MCP (Streamable HTTP) · Vercel
+
+## Tests
+
+Run the available code check with:
+
+```bash
+npm run lint
+```
